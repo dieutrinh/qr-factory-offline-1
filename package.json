@@ -1,14 +1,14 @@
 {
-  "name": "qr-factory-offline",
-  "version": "1.0.0",
-  "main": "main.js",
-  "private": true,
-  "scripts": {
-    "start": "electron .",
-    "dist:win": "electron-builder --win portable"
-  },
-  "devDependencies": {
-    "electron": "^30.0.0",
-    "electron-builder": "^24.13.3"
+  "build": {
+    "asar": true,
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "www/**/*"
+    ],
+    "win": {
+      "target": ["portable"]
+    }
   }
 }
