@@ -1,0 +1,30 @@
+name: Build Windows Portable EXE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        working-directory: qr-factory-electron-portable-demo
+        run: npm install
+
+      - name: Build portable EXE
+        working-directory: qr-factory-electron-portable-demo
+        run: npm run dist:win
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QR-Factory-Offline-Windows-Portable
+          path: qr-factory-electron-portable-demo/dist/*.exe
