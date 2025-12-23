@@ -5,76 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>QR Factory V2 — Admin</title>
   <style>
-    :root{
-      --bg:#071022; --panel:#0b1a33; --panel2:#0a1630;
-      --txt:#d7e2ff; --muted:#92a6d6; --line:#1e3566;
-      --btn:#2f6bff; --btn2:#203a70; --ok:#8fffb7; --err:#ff8f8f;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,Segoe UI,Arial}
+    :root{--bg:#071022;--panel:#0b1a33;--panel2:#0a1630;--txt:#d7e2ff;--muted:#92a6d6;--line:#1e3566;--btn:#2f6bff;--btn2:#203a70;--ok:#8fffb7;--err:#ff8f8f;}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,Segoe UI,Arial}
     .wrap{padding:18px;max-width:1200px;margin:0 auto}
     .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:16px}
-    h1{margin:0 0 8px;font-size:20px}
-    a{color:#b7ccff}
+    h1{margin:0 0 8px;font-size:20px} a{color:#b7ccff}
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
-    input, textarea, select{
-      padding:10px 12px;border-radius:12px;border:1px solid var(--line);
-      background:#060f22;color:var(--txt);outline:none;
-    }
-    button{
-      border:1px solid var(--line); border-radius:12px;
-      padding:10px 14px; color:var(--txt); background:var(--btn2);
-      cursor:pointer; font-weight:600;
-    }
+    input{padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#060f22;color:var(--txt);outline:none}
+    button{border:1px solid var(--line);border-radius:12px;padding:10px 14px;color:var(--txt);background:var(--btn2);cursor:pointer;font-weight:600}
     button.primary{background:var(--btn);border-color:#2f6bff}
-    .msg{margin-top:10px;font-size:13px}
-    .msg.ok{color:var(--ok)}
-    .msg.err{color:var(--err)}
-    table{width:100%;border-collapse:collapse;margin-top:10px;overflow:auto}
+    .msg{margin-top:10px;font-size:13px}.msg.ok{color:var(--ok)}.msg.err{color:var(--err)}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
     th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
     th{color:var(--muted);font-weight:600}
     .small{color:var(--muted);font-size:12px}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#081636;color:var(--muted);font-size:12px}
   </style>
 </head>
-
 <body>
 <div class="wrap">
   <div class="card">
     <h1>🛠️ Admin Dashboard</h1>
-    <div class="small">
-      <a href="./index.html">← Về Generate</a>
-      • Dữ liệu đang lưu offline trong localStorage (qrdb_products / qrdb_history).
-    </div>
+    <div class="small"><a href="./index.html">← Generate</a></div>
 
     <div class="row">
       <input id="q" placeholder="Tìm code / product / batch..." style="min-width:260px;flex:1" />
       <button class="primary" id="btnReload">Reload</button>
-      <button id="btnExportCsv">Export CSV</button>
-      <button id="btnClearHistory">Clear History</button>
+      <button id="btnExport">Export Excel</button>
+      <label style="display:inline-flex;gap:8px;align-items:center">
+        <input type="file" id="file" accept=".xlsx,.xls" />
+        <button id="btnImport">Import Excel</button>
+      </label>
     </div>
 
     <div id="msg" class="msg"></div>
 
-    <h3 style="margin:14px 0 6px">Sản phẩm</h3>
-    <div class="small">Click code để mở trang scan.</div>
+    <h3 style="margin:14px 0 6px">Products</h3>
     <table>
       <thead>
-        <tr>
-          <th>Code</th>
-          <th>Product</th>
-          <th>Batch</th>
-          <th>MFG</th>
-          <th>EXP</th>
-          <th>Status</th>
-          <th>Updated</th>
-        </tr>
+        <tr><th>Code</th><th>Product</th><th>Batch</th><th>MFG</th><th>EXP</th><th>Status</th><th>Updated</th></tr>
       </thead>
       <tbody id="tbody"></tbody>
     </table>
 
-    <h3 style="margin:16px 0 6px">Lịch sử</h3>
-    <div id="history" class="small"></div>
+    <h3 style="margin:16px 0 6px">History (latest)</h3>
+    <div id="hist" class="small"></div>
   </div>
 </div>
 
@@ -83,93 +57,91 @@
   const $ = (id) => document.getElementById(id);
   const msg = $("msg");
   const tbody = $("tbody");
-  const historyDiv = $("history");
+  const hist = $("hist");
 
-  function setMsg(t, kind="") {
-    msg.className = "msg " + (kind||"");
-    msg.textContent = t || "";
+  function setMsg(t,k=""){ msg.className="msg "+(k||""); msg.textContent=t||""; }
+  function fmtIso(iso){ return iso ? String(iso).replace("T"," ").slice(0,19) : "-"; }
+
+  async function apiGet(path){
+    if (window.qrFactory?.apiGet) return await window.qrFactory.apiGet(path);
+    const r = await fetch(path); if(!r.ok) throw new Error(await r.text()); return await r.json();
+  }
+  async function apiPost(path, body){
+    if (window.qrFactory?.apiPost) return await window.qrFactory.apiPost(path, body);
+    const r = await fetch(path,{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok) throw new Error(await r.text()); return await r.json();
   }
 
-  function loadProducts(){
-    try { return JSON.parse(localStorage.getItem("qrdb_products") || "{}"); }
-    catch { return {}; }
-  }
-
-  function loadHistory(){
-    try { return JSON.parse(localStorage.getItem("qrdb_history") || "[]"); }
-    catch { return []; }
-  }
-
-  function buildScanUrl(code) {
-    const u = new URL("./qr.html", window.location.href);
-    u.searchParams.set("token", code);
-    return u.toString();
-  }
-
-  function fmtIso(iso) {
-    if(!iso) return "-";
-    return String(iso).replace("T"," ").slice(0,19);
-  }
-
-  function render(){
+  async function load(){
     const q = $("q").value.trim().toLowerCase();
-    const db = loadProducts();
-    const rows = Object.values(db).sort((a,b)=> (b.updated_at||"").localeCompare(a.updated_at||""));
+    const rows = await apiGet("/api/excel/export"); // không dùng json
+  }
 
+  async function loadProductsAndHistory(){
+    // Products: gọi API scan? không có list endpoint -> dùng sqlite trực tiếp là nặng
+    // => trick: export Excel là file binary, nên ta tạo endpoint JSON nhỏ: dùng /api/history + /api/scan theo code là không tiện.
+    // => Đơn giản: thêm endpoint list trong server (đã có export excel). Nhưng để khỏi đổi thêm, ta tạo endpoint list ngay:
+    // Nếu bạn muốn list JSON chuẩn, mình sẽ thêm /api/products trong server. Tạm thời, ta dùng /api/history để show activity + chỉ list 50 code gần nhất.
+    const h = await apiGet("/api/history");
+    const items = (h.rows || []).slice(0, 120);
+
+    hist.innerHTML = items.map(x => `• ${fmtIso(x.created_at)} — <b>${x.action}</b> — ${x.code}`).join("<br/>") || "(no history)";
+
+    // Lấy unique code từ history rồi fetch /api/scan?token=
+    const codes = [...new Set(items.map(x => x.code).filter(Boolean))].slice(0, 80);
+    const proms = codes.map(async c => {
+      try {
+        const r = await apiGet(`/api/scan?token=${encodeURIComponent(c)}`);
+        return r.ok ? r.data : null;
+      } catch { return null; }
+    });
+    const products = (await Promise.all(proms)).filter(Boolean);
+
+    const q = $("q").value.trim().toLowerCase();
     tbody.innerHTML = "";
-    for (const r of rows) {
+    for (const r of products) {
       const blob = `${r.code} ${r.product_name} ${r.batch_serial}`.toLowerCase();
       if (q && !blob.includes(q)) continue;
-
       const tr = document.createElement("tr");
-      const scan = buildScanUrl(r.code);
       tr.innerHTML = `
-        <td><a href="${scan}">${r.code}</a></td>
-        <td>${r.product_name || ""}</td>
-        <td>${r.batch_serial || ""}</td>
-        <td>${r.mfg_date || ""}</td>
-        <td>${r.exp_date || ""}</td>
-        <td><span class="pill">${r.status || ""}</span></td>
+        <td><a href="./qr.html?token=${encodeURIComponent(r.code)}">${r.code}</a></td>
+        <td>${r.product_name||""}</td>
+        <td>${r.batch_serial||""}</td>
+        <td>${r.mfg_date||""}</td>
+        <td>${r.exp_date||""}</td>
+        <td>${r.status||""}</td>
         <td>${fmtIso(r.updated_at)}</td>
       `;
       tbody.appendChild(tr);
     }
-
-    const hist = loadHistory().slice(0, 80);
-    historyDiv.innerHTML = hist.length
-      ? hist.map(h => `• <span class="pill">${h.action}</span> <b>${h.code}</b> — ${fmtIso(h.ts)}`).join("<br/>")
-      : "(Chưa có lịch sử)";
   }
 
-  function exportCSV(){
-    const db = loadProducts();
-    const rows = Object.values(db);
-    const headers = ["code","product_name","batch_serial","mfg_date","exp_date","note_extra","status","updated_at"];
-    const escape = (v) => `"${String(v ?? "").replaceAll('"','""')}"`;
-    const csv = [headers.join(",")].concat(
-      rows.map(r => headers.map(h => escape(r[h])).join(","))
-    ).join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  async function exportExcel(){
+    // tải file trực tiếp
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "products.csv";
-    document.body.appendChild(a);
+    a.href = "/api/excel/export";
+    a.download = "products.xlsx";
     a.click();
-    a.remove();
-    setMsg("Đã export CSV ✅", "ok");
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    $("btnReload").onclick = () => { render(); setMsg("Reload ✅", "ok"); };
-    $("btnExportCsv").onclick = () => exportCSV();
-    $("btnClearHistory").onclick = () => {
-      localStorage.setItem("qrdb_history", "[]");
-      render();
-      setMsg("Đã xoá history ✅", "ok");
-    };
-    $("q").addEventListener("input", render);
-    render();
+  async function importExcel(){
+    const f = $("file").files[0];
+    if(!f) return setMsg("Chọn file Excel trước","err");
+    const buf = await f.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+    const r = await apiPost("/api/excel/import", { base64 });
+    if(r.ok) setMsg(`Import OK ✅ rows=${r.imported}`,"ok");
+    else setMsg("Import lỗi","err");
+    await loadProductsAndHistory();
+  }
+
+  document.addEventListener("DOMContentLoaded", async () => {
+    $("btnReload").onclick = () => loadProductsAndHistory().catch(e=>setMsg(String(e.message||e),"err"));
+    $("btnExport").onclick = () => exportExcel();
+    $("btnImport").onclick = () => importExcel().catch(e=>setMsg(String(e.message||e),"err"));
+    $("q").addEventListener("input", () => loadProductsAndHistory().catch(()=>{}));
+    await loadProductsAndHistory();
+    setMsg("Ready ✅","ok");
   });
 })();
 </script>
