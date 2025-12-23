@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist:win": "electron-builder --win portable"
+    "dist:win": "electron-builder -win portable"
   },
   "dependencies": {
     "qrcode": "^1.5.4"
@@ -15,20 +15,9 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.company.qrfactory.offline",
-    "productName": "QR Factory Offline",
     "asar": true,
-    "files": [
-      "main.js",
-      "preload.js",
-      "www/**",
-      "node_modules/**",
-      "package.json"
-    ],
     "win": {
-      "target": [
-        "portable"
-      ]
+      "target": ["portable"]
     }
   }
 }
