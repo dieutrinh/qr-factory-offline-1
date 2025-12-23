@@ -1,6 +1,10 @@
+// src/src/db.js
+"use strict";
+
 const path = require("path");
 const Database = require("better-sqlite3");
 
+// DB nằm cạnh EXE / thư mục chạy
 const dbPath = path.join(process.cwd(), "qr_factory.sqlite");
 const db = new Database(dbPath);
 
@@ -23,9 +27,10 @@ function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT,
       action TEXT,
-      created_at TEXT
+      created_at TEXT,
+      meta TEXT
     );
   `);
 }
 
-module.exports = { db, initDb };
+module.exports = { db, initDb, dbPath };
