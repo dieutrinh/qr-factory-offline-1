@@ -1,11 +1,14 @@
-name: Build Windows Portable EXE
+name: Build V2 Online (ZIP)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ "main" ]
 
 jobs:
-  build:
-    runs-on: windows-latest
+  build_zip:
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -13,17 +16,39 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: "20"
+          cache: "npm"
 
-      - name: Install
+      - name: Install deps
         run: npm ci
 
-      - name: Build portable EXE
-        run: npm run dist:win
+      - name: Smoke test (start then stop)
+        run: |
+          node -v
+          node server.js &
+          sleep 2
+          curl -s http://localhost:3000/api/health | head -c 200
+          pkill -f "node server.js" || true
 
-      - name: Upload artifact
+      - name: Make release folder
+        run: |
+          mkdir -p release
+          cp -R public src server.js package.json release/
+          # sqlite db sẽ tạo khi chạy, không commit db vào artifact
+          # include lockfile nếu có
+          if [ -f package-lock.json ]; then cp package-lock.json release/; fi
+          echo "PORT=3000" > release/.env.example
+          echo "BASE_URL=http://localhost:3000" >> release/.env.example
+          echo "ADMIN_TOKEN=change-me" >> release/.env.example
+
+      - name: Zip
+        run: |
+          cd release
+          zip -r ../qr-factory-v2-online.zip .
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QR-Factory-Offline-EXE
-          path: dist/*.exe
+          name: qr-factory-v2-online
+          path: qr-factory-v2-online.zip
+          retention-days: 14
