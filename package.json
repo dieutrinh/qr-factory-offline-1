@@ -1,6 +1,6 @@
 {
   "name": "qr-factory-offline",
-  "version": "2.0.1",
+  "version": "2.0.0",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -8,7 +8,9 @@
     "dist:win": "electron-builder --win portable"
   },
   "dependencies": {
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "xlsx": "^0.18.5",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "electron": "^30.0.0",
@@ -19,17 +21,10 @@
     "files": [
       "main.js",
       "preload.js",
-      "www/**",
-      "node_modules/**",
-      "package.json"
+      "www/**/*"
     ],
     "win": {
-      "target": [
-        "portable"
-      ]
-    },
-    "portable": {
-      "artifactName": "QR Factory Offline.exe"
+      "target": ["portable"]
     }
   }
 }
