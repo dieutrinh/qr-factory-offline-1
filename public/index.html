@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR Factory V2 Online — Generate</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:24px;background:#0b1220;color:#e8eefc}
+    .wrap{max-width:1100px;margin:auto;display:grid;grid-template-columns:1.1fr .9fr;gap:16px}
+    .card{background:#101a33;border:1px solid #22325f;border-radius:16px;padding:16px}
+    h1{margin:0 0 12px;font-size:20px}
+    label{display:block;font-size:12px;color:#b8c7ff;margin:10px 0 6px}
+    input,textarea,select{width:100%;box-sizing:border-box;padding:10px;border-radius:12px;border:1px solid #2b3a6d;background:#0b1220;color:#e8eefc}
+    textarea{min-height:80px;resize:vertical}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button{cursor:pointer;border:none;border-radius:12px;padding:10px 12px;background:#4f7cff;color:#07102a;font-weight:800}
+    button.secondary{background:#22325f;color:#e8eefc;border:1px solid #2b3a6d}
+    .muted{color:#9bb0f5;font-size:12px;line-height:1.35}
+    img{max-width:100%;background:#fff;border-radius:12px;padding:8px}
+    .pill{display:inline-block;background:#1a2a55;border:1px solid #2b3a6d;color:#b8c7ff;padding:6px 10px;border-radius:999px;font-size:12px}
+    a{color:#9bb0f5}
+    .code{font-family:ui-monospace,Menlo,Consolas,monospace}
+    .divider{height:1px;background:#22325f;margin:12px 0}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>🎨 QR Factory V2 Online — Tạo QR động (5 fields)</h1>
+      <div class="muted">
+        • Admin dashboard: <a href="/admin">/admin</a><br/>
+        • QR động: scan sẽ đọc dữ liệu mới nhất từ DB (cập nhật bằng dashboard/Excel).
+      </div>
+
+      <div class="divider"></div>
+
+      <label>Product Name</label>
+      <input id="productName" placeholder="Ví dụ: Nước giải khát Xá Xị 330ml" />
+
+      <label>Batch/Serial</label>
+      <input id="batch" placeholder="Ví dụ: BATCH-2025-12-23" />
+
+      <div class="row">
+        <div>
+          <label>MFG Date</label>
+          <input id="mfgDate" placeholder="YYYY-MM-DD" />
+        </div>
+        <div>
+          <label>EXP Date</label>
+          <input id="expDate" placeholder="YYYY-MM-DD" />
+        </div>
+      </div>
+
+      <label>Note/Extra</label>
+      <textarea id="note" placeholder="Ghi chú thêm..."></textarea>
+
+      <div class="row">
+        <div>
+          <label>Status</label>
+          <select id="status">
+            <option value="active" selected>active</option>
+            <option value="inactive">inactive</option>
+            <option value="revoked">revoked</option>
+          </select>
+        </div>
+        <div>
+          <label>(Tuỳ chọn) Code</label>
+          <input id="codeInput" placeholder="Để trống = tự sinh" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="btnCreate">Tạo QR (lưu DB)</button>
+        <button class="secondary" id="btnOpen">Mở link scan</button>
+      </div>
+
+      <div class="actions">
+        <button class="secondary" id="btnPng">Tải PNG</button>
+        <button class="secondary" id="btnPdf">Tải PDF</button>
+      </div>
+
+      <p class="muted" id="msg"></p>
+    </div>
+
+    <div class="card">
+      <h1>🧾 Kết quả</h1>
+      <div class="pill">Code: <span class="code" id="code">—</span></div>
+      <div style="height:10px"></div>
+      <div class="pill">URL: <span class="code" id="url">—</span></div>
+      <div style="height:14px"></div>
+      <img id="qrImg" alt="QR Preview" />
+      <div style="height:8px"></div>
+      <div class="muted">
+        Tip: Bản Electron sẽ tự chạy server nội bộ. Nếu deploy web thật thì set <span class="code">BASE_URL</span> để QR in ra trỏ đúng domain.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentCode = "";
+    let currentUrl = "";
+
+    function el(id){ return document.getElementById(id); }
+    function val(id){ return el(id).value.trim(); }
+    function setMsg(t){ el("msg").textContent = t; }
+
+    async function create() {
+      setMsg("Đang tạo...");
+      const payload = {
+        code: val("codeInput") || undefined,
+        productName: val("productName"),
+        batch: val("batch"),
+        mfgDate: val("mfgDate"),
+        expDate: val("expDate"),
+        note: val("note"),
+        status: val("status") || "active"
+      };
+
+      const r = await fetch("/api/admin/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      if (!j.ok) { setMsg("Lỗi: " + (j.error || "unknown")); return; }
+
+      currentCode = j.code;
+      currentUrl = j.url; // relative: /q/<code>
+
+      el("code").textContent = currentCode;
+      el("url").textContent = location.origin + currentUrl;
+
+      // preview QR from server export png (works both Electron + web)
+      el("qrImg").src = "/api/admin/export?format=png&code=" + encodeURIComponent(currentCode);
+
+      setMsg("✅ Tạo xong!");
+    }
+
+    function openScan() {
+      if (!currentUrl) return setMsg("Chưa có QR. Bấm 'Tạo QR' trước.");
+      window.open(currentUrl, "_blank");
+    }
+
+    function download(fmt) {
+      if (!currentCode) return setMsg("Chưa có QR. Bấm 'Tạo QR' trước.");
+      const url = "/api/admin/export?format=" + fmt + "&code=" + encodeURIComponent(currentCode);
+      window.open(url, "_blank");
+    }
+
+    el("btnCreate").addEventListener("click", create);
+    el("btnOpen").addEventListener("click", openScan);
+    el("btnPng").addEventListener("click", () => download("png"));
+    el("btnPdf").addEventListener("click", () => downlo
