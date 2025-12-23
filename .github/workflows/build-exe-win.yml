@@ -1,18 +1,47 @@
-- name: Setup Node
-  uses: actions/setup-node@v4
-  with:
-    node-version: 20
-    cache: npm
+name: Build EXE (portable)
 
-- name: Configure npm (retry/timeout)
-  run: |
-    npm config set fetch-retries 5
-    npm config set fetch-retry-mintimeout 20000
-    npm config set fetch-retry-maxtimeout 120000
-    npm config set fetch-timeout 300000
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
-- name: Install deps (with Electron mirror)
-  env:
-    ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-    ELECTRON_CUSTOM_DIR: ""
-  run: npm ci --no-audit --no-fund
+jobs:
+  build_win:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Configure npm retry/timeout
+        run: |
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-timeout 300000
+
+      - name: Install deps (Electron mirror)
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+          ELECTRON_CUSTOM_DIR: ""
+        run: npm ci --no-audit --no-fund
+
+      - name: Build portable EXE
+        run: npm run dist
+
+      - name: List dist
+        run: |
+          dir
+          dir dist
+
+      - name: Upload dist (EXE)
+        uses: actions/upload-artifact@v4
+        with:
+          name: qr-factory-exe
+          path: dist/**
