@@ -13,6 +13,7 @@ function createWindow() {
   });
 
   const indexPath = path.join(__dirname, 'www', 'index.html');
+  preload: path.join(__dirname,'preload.js')
 
   if (fs.existsSync(indexPath)) {
     win.loadFile(indexPath);
