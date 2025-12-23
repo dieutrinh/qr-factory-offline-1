@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QR Factory V2 — Scan</title>
+  <style>
+    :root{
+      --bg:#071022; --panel:#0b1a33; --panel2:#0a1630;
+      --txt:#d7e2ff; --muted:#92a6d6; --line:#1e3566; --ok:#8fffb7; --err:#ff8f8f;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,Segoe UI,Arial}
+    .wrap{padding:18px;max-width:900px;margin:0 auto}
+    .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:16px}
+    h1{margin:0 0 8px;font-size:20px}
+    a{color:#b7ccff}
+    .row{display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:start;margin-top:10px}
+    .k{color:var(--muted)}
+    .msg.ok{color:var(--ok)}
+    .msg.err{color:var(--err)}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#081636;color:var(--muted);font-size:12px}
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>📲 Scan Result</h1>
+    <div class="k">
+      <a href="./index.html">← Generate</a> • <a href="./admin.html">Admin</a>
+    </div>
+
+    <div id="msg" class="msg" style="margin-top:10px;"></div>
+
+    <div class="row"><div class="k">Token/Code</div><div id="code">-</div></div>
+    <div class="row"><div class="k">Product</div><div id="product">-</div></div>
+    <div class="row"><div class="k">Batch</div><div id="batch">-</div></div>
+    <div class="row"><div class="k">MFG</div><div id="mfg">-</div></div>
+    <div class="row"><div class="k">EXP</div><div id="exp">-</div></div>
+    <div class="row"><div class="k">Note</div><div id="note">-</div></div>
+    <div class="row"><div class="k">Status</div><div id="status">-</div></div>
+    <div class="row"><div class="k">Updated</div><div id="updated">-</div></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  function setMsg(text, kind="") {
+    const el = $("msg");
+    el.className = "msg " + (kind || "");
+    el.textContent = text || "";
+  }
+
+  function loadProducts(){
+    try { return JSON.parse(localStorage.getItem("qrdb_products") || "{}"); }
+    catch { return {}; }
+  }
+
+  function addHistory(evt) {
+    const key = "qrdb_history";
+    let arr = [];
+    try { arr = JSON.parse(localStorage.getItem(key) || "[]"); } catch {}
+    arr.unshift({ ...evt, ts: new Date().toISOString() });
+    arr = arr.slice(0, 300);
+    localStorage.setItem(key, JSON.stringify(arr));
+  }
+
+  function fmtIso(iso) {
+    if(!iso) return "-";
+    return String(iso).replace("T"," ").slice(0,19);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const u = new URL(window.location.href);
+    const token = (u.searchParams.get("token") || "").trim();
+
+    $("code").textContent = token || "-";
+
+    if (!token) {
+      setMsg("Thiếu token trên URL. Ví dụ: qr.html?token=QRXXXX", "err");
+      return;
+    }
+
+    const db = loadProducts();
+    const r = db[token];
+
+    addHistory({ action: "scan", code: token });
+
+    if (!r) {
+      setMsg("Không tìm thấy dữ liệu cho token này (chưa tạo hoặc đã xoá).", "err");
+      return;
+    }
+
+    setMsg("OK ✅ (đọc dữ liệu mới nhất)", "ok");
+    $("product").textContent = r.product_name || "-";
+    $("batch").textContent = r.batch_serial || "-";
+    $("mfg").textContent = r.mfg_date || "-";
+    $("exp").textContent = r.exp_date || "-";
+    $("note").textContent = r.note_extra || "-";
+    $("status").innerHTML = `<span class="pill">${r.status || "-"}</span>`;
+    $("updated").textContent = fmtIso(r.updated_at);
+  });
+})();
+</script>
+</body>
+</html>
