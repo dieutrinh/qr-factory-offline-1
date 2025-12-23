@@ -17,10 +17,13 @@
   "build": {
     "asar": true,
     "files": [
-      "main.js",
-      "preload.js",
-      "package.json",
-      "www/**"
+  "main.js",
+  "preload.js",
+  "package.json",
+  "www/**",
+  "node_modules/**"
+]
+
     ],
     "win": {
       "target": ["portable"]
