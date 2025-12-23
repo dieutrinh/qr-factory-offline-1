@@ -1,100 +1,69 @@
 <!doctype html>
 <html lang="vi">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>QR Factory V2 — Scan</title>
-<style>
-:root{--bg:#071022;--panel:#0b1a33;--panel2:#0a1630;--txt:#d7e2ff;--muted:#92a6d6;--line:#1e3566;--ok:#8fffb7;--err:#ff8f8f}
-*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,Segoe UI,Arial}
-.wrap{max-width:980px;margin:24px auto;padding:18px}
-.card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:18px}
-a{color:#9ec1ff;text-decoration:none} a:hover{text-decoration:underline}
-.row{display:grid;grid-template-columns:160px 1fr;gap:10px;margin-top:10px}
-.k{color:var(--muted)} .msg{margin-top:10px}.ok{color:var(--ok)}.err{color:var(--err)}
-</style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>QR Factory V2 — Scan</title>
+  <style>
+    :root{--bg:#071022;--panel:#0b1a33;--panel2:#0a1630;--txt:#d7e2ff;--muted:#92a6d6;--line:#1e3566;--err:#ff8f8f;}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,Segoe UI,Arial}
+    .wrap{max-width:900px;margin:20px auto;padding:16px}
+    .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:18px}
+    a{color:#9ec1ff;text-decoration:none} a:hover{text-decoration:underline}
+    .err{color:var(--err)}
+    .grid{display:grid;grid-template-columns:160px 1fr;gap:10px;margin-top:12px}
+    .k{color:var(--muted)}
+  </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h2>🧾 Scan Result</h2>
-    <div style="margin:6px 0 12px">
-      <a href="./index.html">← Generate</a> · <a href="./admin.html">Admin</a>
+    <h2>📲 Scan Result</h2>
+    <div><a href="./index.html">← Generate</a> • <a href="./admin.html">Admin</a></div>
+    <div id="msg" class="err" style="margin-top:10px"></div>
+
+    <div class="grid">
+      <div class="k">Token/Code</div><div id="code">-</div>
+      <div class="k">Product</div><div id="product">-</div>
+      <div class="k">Batch</div><div id="batch">-</div>
+      <div class="k">MFG</div><div id="mfg">-</div>
+      <div class="k">EXP</div><div id="exp">-</div>
+      <div class="k">Note</div><div id="note">-</div>
+      <div class="k">Status</div><div id="status">-</div>
+      <div class="k">Updated</div><div id="updated">-</div>
     </div>
-
-    <div id="msg" class="msg"></div>
-
-    <div class="row"><div class="k">Token/Code</div><div id="v_code">-</div></div>
-    <div class="row"><div class="k">Product</div><div id="v_product">-</div></div>
-    <div class="row"><div class="k">Batch</div><div id="v_batch">-</div></div>
-    <div class="row"><div class="k">MFG</div><div id="v_mfg">-</div></div>
-    <div class="row"><div class="k">EXP</div><div id="v_exp">-</div></div>
-    <div class="row"><div class="k">Note</div><div id="v_note">-</div></div>
-    <div class="row"><div class="k">Status</div><div id="v_status">-</div></div>
-    <div class="row"><div class="k">Updated</div><div id="v_updated">-</div></div>
   </div>
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
-const setMsg=(t,cls)=>{const m=$("msg");m.textContent=t;m.className="msg "+cls;};
+const qp = new URLSearchParams(location.search);
+const token = qp.get("token") || "";
 
-let baseUrl=null;
-
-function getToken(){
-  const u=new URL(location.href);
-  // ✅ hỗ trợ cả token= và code=
-  return (u.searchParams.get("token") || u.searchParams.get("code") || "").trim();
-}
-
-async function loadBaseUrl(){
-  if(window.qrFactory?.getApiBase){
-    const r=await window.qrFactory.getApiBase();
-    if(!r?.ok) throw new Error("API base not ready");
-    baseUrl=`http://${r.host}:${r.port}`;
-  }else{
-    baseUrl=location.origin;
-  }
-}
-
-async function apiGet(path){
-  if(window.qrFactory?.apiGet) return await window.qrFactory.apiGet(path);
-  const r=await fetch(baseUrl+path); if(!r.ok) throw new Error(await r.text());
-  return await r.json();
-}
-
-async function load(){
-  const token=getToken();
+async function run(){
   if(!token){
-    setMsg("Thiếu token trên URL. Ví dụ: qr.html?token=QRXXXXX","err");
+    $("msg").textContent = "Thiếu token trên URL. Ví dụ: qr.html?token=QRXXXXX";
     return;
   }
-  $("v_code").textContent=token;
+  $("code").textContent = token;
 
   try{
-    const r=await apiGet(`/api/scan?token=${encodeURIComponent(token)}`);
-    const d=r.data||{};
-    $("v_product").textContent=d.product_name||"-";
-    $("v_batch").textContent=d.batch_serial||"-";
-    $("v_mfg").textContent=d.mfg_date||"-";
-    $("v_exp").textContent=d.exp_date||"-";
-    $("v_note").textContent=d.note_extra||"-";
-    $("v_status").textContent=d.status||"-";
-    $("v_updated").textContent=d.updated_at||"-";
-    setMsg("OK ✅","ok");
+    const r = await window.qrFactory.apiGet(`/api/scan?token=${encodeURIComponent(token)}`);
+    if(!r.ok) throw new Error(r.error || "scan failed");
+    const d = r.data || {};
+    $("product").textContent = d.product_name || "-";
+    $("batch").textContent = d.batch_serial || "-";
+    $("mfg").textContent = d.mfg_date || "-";
+    $("exp").textContent = d.exp_date || "-";
+    $("note").textContent = d.note_extra || "-";
+    $("status").textContent = d.status || "-";
+    $("updated").textContent = d.updated_at || "-";
+    $("msg").textContent = "";
   }catch(e){
-    setMsg(String(e.message||e),"err");
+    $("msg").textContent = "Không tìm thấy / lỗi: " + (e.message||e);
   }
 }
-
-document.addEventListener("DOMContentLoaded", async ()=>{
-  try{
-    await loadBaseUrl();
-    await load();
-  }catch(e){
-    setMsg("Server chưa sẵn sàng.","err");
-  }
-});
+document.addEventListener("DOMContentLoaded", run);
 </script>
 </body>
 </html>
