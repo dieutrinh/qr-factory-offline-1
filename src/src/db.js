@@ -1,78 +1,31 @@
-import Database from "better-sqlite3";
-import XLSX from "xlsx";
-import fs from "fs";
-import path from "path";
+const path = require("path");
+const Database = require("better-sqlite3");
 
-const DB_FILE = process.env.DB_FILE || "data.sqlite";
+const dbPath = path.join(process.cwd(), "qr_factory.sqlite");
+const db = new Database(dbPath);
 
-// đảm bảo folder tồn tại
-const dbDir = path.dirname(DB_FILE);
-if (dbDir && dbDir !== "." && !fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
-
-const db = new Database(DB_FILE);
-
-export function initDb() {
+function initDb() {
   db.exec(`
-    PRAGMA journal_mode=WAL;
+    PRAGMA journal_mode = WAL;
 
-    CREATE TABLE IF NOT EXISTS qr_codes (
+    CREATE TABLE IF NOT EXISTS products(
       code TEXT PRIMARY KEY,
-      productName TEXT,
-      batch TEXT,
-      mfgDate TEXT,
-      expDate TEXT,
-      note TEXT,
-      status TEXT DEFAULT 'active',
-      updatedAt TEXT DEFAULT (datetime('now'))
+      product_name TEXT,
+      batch_serial TEXT,
+      mfg_date TEXT,
+      exp_date TEXT,
+      note_extra TEXT,
+      status TEXT,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS scan_logs(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT,
+      action TEXT,
+      created_at TEXT
     );
   `);
 }
 
-export function upsertOne(row) {
-  const stmt = db.prepare(`
-    INSERT INTO qr_codes (code, productName, batch, mfgDate, expDate, note, status, updatedAt)
-    VALUES (@code, @productName, @batch, @mfgDate, @expDate, @note, @status, datetime('now'))
-    ON CONFLICT(code) DO UPDATE SET
-      productName=excluded.productName,
-      batch=excluded.batch,
-      mfgDate=excluded.mfgDate,
-      expDate=excluded.expDate,
-      note=excluded.note,
-      status=excluded.status,
-      updatedAt=datetime('now')
-  `);
-  stmt.run(row);
-}
-
-export function upsertMany(rows) {
-  const tx = db.transaction((items) => {
-    for (const r of items) upsertOne(r);
-  });
-  tx(rows);
-  return { upserted: rows.length };
-}
-
-export function getByCode(code) {
-  return db.prepare(`SELECT * FROM qr_codes WHERE code = ?`).get(code);
-}
-
-export function listAll() {
-  return db.prepare(`SELECT * FROM qr_codes ORDER BY updatedAt DESC`).all();
-}
-
-export function exportToXlsxBuffer() {
-  const items = listAll();
-  const ws = XLSX.utils.json_to_sheet(items);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "qr_codes");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-}
-
-export function getStats() {
-  const total = db.prepare(`SELECT COUNT(*) AS c FROM qr_codes`).get().c;
-  const active = db.prepare(`SELECT COUNT(*) AS c FROM qr_codes WHERE status='active'`).get().c;
-  const inactive = db.prepare(`SELECT COUNT(*) AS c FROM qr_codes WHERE status!='active'`).get().c;
-  return { total, active, inactive };
-}
+module.exports = { db, initDb };
