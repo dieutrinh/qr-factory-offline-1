@@ -34,7 +34,8 @@
     "files": [
       "server.js",
       "src/src/**",
-      "public/public/**",
+      "public/**",
+      "www/**",
       "electron/**",
       "package.json"
     ],
