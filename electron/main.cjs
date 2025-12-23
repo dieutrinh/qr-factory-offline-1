@@ -1,3 +1,5 @@
+const { spawn } = require("child_process");
+let serverProc = null;
 const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -24,6 +26,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+ // auto start server
+const serverPath = path.join(__dirname, "..", "server.js");
+serverProc = spawn(process.execPath, [serverPath], { stdio: "inherit" });
   createWindow();
 
   app.on("activate", () => {
@@ -33,6 +38,7 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+  if (serverProc) serverProc.kill();
 });
 
 // ===== IPC: open link =====
