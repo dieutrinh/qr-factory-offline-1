@@ -8,8 +8,7 @@ function createWindow() {
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false
+      contextIsolation: true
     }
   });
 
@@ -22,18 +21,10 @@ function createWindow() {
       'data:text/html;charset=utf-8,' +
         encodeURIComponent(`
           <h2>❌ Không tìm thấy UI offline</h2>
-          <p>Thiếu file: <b>${indexPath}</b></p>
-          <p>Nguyên nhân: electron-builder chưa đóng gói thư mục <b>www/</b> vào EXE.</p>
+          <p>Thiếu file: ${indexPath}</p>
         `)
     );
   }
-
-  // Tắt DevTools khi release ổn định (để người già khỏi thấy)
-  // win.webContents.openDevTools({ mode: 'detach' });
 }
 
 app.whenReady().then(createWindow);
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
