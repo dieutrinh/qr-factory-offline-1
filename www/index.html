@@ -1,50 +1,18 @@
-<!doctype html>
-<html lang="vi">
-<head>
-  <meta charset="utf-8" />
-  <title>QR Factory Offline</title>
-  <style>
-    body{font-family:system-ui,Arial;background:#f5f6f8;margin:0}
-    .wrap{height:100vh;display:flex;align-items:center;justify-content:center}
-    .card{background:#fff;padding:40px;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.08);width:640px}
-    input{width:100%;padding:14px 12px;font-size:16px}
-    button{width:100%;margin-top:12px;padding:14px 12px;font-size:16px;background:#f4b400;border:0;border-radius:10px;cursor:pointer}
-    #err{color:#c00;margin-top:10px}
-    #out img{margin-top:14px;max-width:260px}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="card">
-      <h2>✅ QR Factory Offline</h2>
-      <div>Tạo QR không cần Internet</div>
-      <br/>
-      <input id="txt" value="trái sầu riêng,,, bình phước, 200000đ, 0903852696, ATP"/>
-      <button id="btn">Tạo QR</button>
-      <div id="err"></div>
-      <div id="out"></div>
-    </div>
-  </div>
+<button type="button" id="btnCreate">Tạo QR (lưu DB)</button>
+<button type="button" id="btnOpen">Mở link scan</button>
+<button type="button" id="btnPng">Tải PNG</button>
+<button type="button" id="btnPdf">Tải PDF</button>
 
-  <script>
-    const $ = (id)=>document.getElementById(id);
+<script>
+  // ví dụ
+  let lastQrDataUrl = "";
 
-    $("btn").addEventListener("click", async () => {
-      $("err").textContent = "";
-      $("out").innerHTML = "";
+  document.getElementById("btnOpen").onclick = async () => {
+    const url = document.getElementById("scanUrl").value; // hoặc nơi bạn đang giữ
+    await window.qrFactory.openExternal(url);
+  };
 
-      try {
-        if (!window.qrFactory || !window.qrFactory.toDataUrl) {
-          throw new Error("Bridge preload chưa sẵn sàng (window.qrFactory missing).");
-        }
-        const dataUrl = await window.qrFactory.toDataUrl($("txt").value);
-        const img = document.createElement("img");
-        img.src = dataUrl;
-        $("out").appendChild(img);
-      } catch (e) {
-        $("err").textContent = e?.message || String(e);
-      }
-    });
-  </script>
-</body>
-</html>
+  document.getElementById("btnPng").onclick = async () => {
+    await window.qrFactory.savePng({ filename: "qr.png", dataUrl: lastQrDataUrl });
+  };
+</script>
