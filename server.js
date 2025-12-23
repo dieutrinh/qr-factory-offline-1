@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import { nanoid } from "nanoid";
@@ -8,7 +9,7 @@ import QRCode from "qrcode";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import XLSX from "xlsx";
 
-// ✅ FIX: repo bạn đang là src/src/db.js
+// repo bạn đang có src/src/db.js
 import {
   initDb,
   upsertMany,
@@ -24,6 +25,20 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function pickPublicDir() {
+  const candidates = [
+    path.join(__dirname, "public", "public"), // public/public/index.html
+    path.join(__dirname, "public"),           // public/index.html
+    path.join(__dirname, "www")               // www/index.html
+  ];
+  for (const dir of candidates) {
+    const f = path.join(dir, "index.html");
+    if (fs.existsSync(f)) return dir;
+  }
+  // fallback: ưu tiên public/public
+  return path.join(__dirname, "public", "public");
+}
+
 export function createApp() {
   initDb();
 
@@ -32,8 +47,7 @@ export function createApp() {
 
   app.use(express.json({ limit: "2mb" }));
 
-  // ✅ FIX: repo bạn đang có public/public/*
-  const PUBLIC_DIR = path.join(__dirname, "public", "public");
+  const PUBLIC_DIR = pickPublicDir();
   app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
 
   function requireAdmin(req, res, next) {
@@ -59,7 +73,7 @@ export function createApp() {
   }
 
   app.get("/api/health", (req, res) => {
-    res.json({ ok: true, stats: getStats() });
+    res.json({ ok: true, stats: getStats(), publicDir: path.basename(PUBLIC_DIR) });
   });
 
   app.post("/api/admin/create", requireAdmin, (req, res) => {
@@ -96,8 +110,7 @@ export function createApp() {
     if (!req.file?.buffer) return res.status(400).json({ ok: false, error: "No file" });
 
     const wb = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheetName = wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
+    const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
     const normalized = [];
@@ -142,12 +155,7 @@ export function createApp() {
       const font = await pdf.embedFont(StandardFonts.Helvetica);
 
       const img = await pdf.embedPng(pngBytes);
-      const imgW = 260, imgH = 260;
-
-      const x = 40;
-      const y = 841.89 - 40 - imgH;
-
-      page.drawImage(img, { x, y, width: imgW, height: imgH });
+      page.drawImage(img, { x: 40, y: 540, width: 260, height: 260 });
 
       const lines = [
         `Code: ${row.code}`,
@@ -160,9 +168,9 @@ export function createApp() {
         `URL: ${url}`
       ];
 
-      let ty = y - 20;
+      let ty = 520;
       for (const l of lines) {
-        page.drawText(l, { x, y: ty, size: 11, font });
+        page.drawText(l, { x: 40, y: ty, size: 11, font });
         ty -= 16;
       }
 
@@ -187,8 +195,7 @@ export async function startServer(port = Number(process.env.PORT || 3000)) {
   const app = createApp();
   return new Promise((resolve) => {
     const server = app.listen(port, "127.0.0.1", () => {
-      const actualPort = server.address().port;
-      resolve({ server, port: actualPort });
+      resolve({ server, port: server.address().port });
     });
   });
 }
@@ -197,3 +204,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { port } = await startServer(Number(process.env.PORT || 3000));
   console.log(`✅ V2 Online running at http://127.0.0.1:${port}`);
 }
+
