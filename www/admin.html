@@ -2,68 +2,101 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>QR Factory V2 — Admin</title>
 <style>
-body{margin:0;background:#071022;color:#d7e2ff;font:14px system-ui}
-.wrap{padding:18px;max-width:1200px;margin:auto}
-.card{background:#0b1a33;border-radius:18px;padding:16px}
-input,button{padding:10px;border-radius:10px;border:none}
-button{background:#2f6bff;color:white;font-weight:600;cursor:pointer}
+:root{--bg:#071022;--panel:#0b1a33;--panel2:#0a1630;--txt:#d7e2ff;--muted:#92a6d6;--line:#1e3566;--ok:#8fffb7;--err:#ff8f8f}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,Segoe UI,Arial}
+.wrap{max-width:1200px;margin:24px auto;padding:18px}
+.card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:18px}
+a{color:#9ec1ff;text-decoration:none} a:hover{text-decoration:underline}
+input,button{padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#071733;color:var(--txt)}
+button{cursor:pointer;background:#1e3a8a;border:0}
 table{width:100%;border-collapse:collapse;margin-top:12px}
-th,td{border-bottom:1px solid #1e3566;padding:8px;text-align:left}
-a{color:#9fb8ff}
+th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left}
+.msg{margin-top:10px}.ok{color:var(--ok)}.err{color:var(--err)}
 </style>
 </head>
 <body>
 <div class="wrap">
-<div class="card">
-<h2>🛠 Admin Dashboard</h2>
-<a href="./index.html">← Generate</a>
+  <div class="card">
+    <h2>🛠 Admin Dashboard</h2>
+    <div style="margin:6px 0 12px">
+      <a href="./index.html">← Generate</a> · <a href="./qr.html">Scan</a>
+    </div>
 
-<div style="margin:12px 0;display:flex;gap:10px">
-  <input id="q" placeholder="Tìm code / product / batch..." style="flex:1">
-  <button onclick="load()">Reload</button>
-</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <input id="q" placeholder="Tìm code / product / batch..." style="flex:1;min-width:280px">
+      <button id="btnReload">Reload</button>
+    </div>
 
-<table>
-<thead>
-<tr>
-<th>Code</th><th>Product</th><th>Batch</th>
-<th>MFG</th><th>EXP</th><th>Status</th><th>Updated</th>
-</tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
-</div>
+    <div id="msg" class="msg"></div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Code</th><th>Product</th><th>Batch</th><th>MFG</th><th>EXP</th><th>Status</th><th>Updated</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
 </div>
 
 <script>
-const $ = id => document.getElementById(id);
+const $=id=>document.getElementById(id);
+const setMsg=(t,cls)=>{const m=$("msg");m.textContent=t;m.className="msg "+cls;};
 
-async function apiGet(url){
-  if (window.qrFactory?.apiGet) return await window.qrFactory.apiGet(url);
-  const r = await fetch(url); return await r.json();
+let baseUrl=null;
+
+async function loadBaseUrl(){
+  if(window.qrFactory?.getApiBase){
+    const r=await window.qrFactory.getApiBase();
+    if(!r?.ok) throw new Error("API base not ready");
+    baseUrl=`http://${r.host}:${r.port}`;
+  }else{
+    baseUrl=location.origin;
+  }
+}
+
+async function apiGet(path){
+  if(window.qrFactory?.apiGet) return await window.qrFactory.apiGet(path);
+  const r=await fetch(baseUrl+path); if(!r.ok) throw new Error(await r.text());
+  return await r.json();
 }
 
 async function load(){
-  const q = $("q").value || "";
-  const r = await apiGet(`/api/products?q=${encodeURIComponent(q)}`);
-  const rows = r.rows || [];
-  $("tbody").innerHTML = rows.map(x => `
-    <tr>
-      <td><a href="./qr.html?token=${x.code}">${x.code}</a></td>
-      <td>${x.product_name}</td>
-      <td>${x.batch_serial}</td>
-      <td>${x.mfg_date}</td>
-      <td>${x.exp_date}</td>
-      <td>${x.status}</td>
-      <td>${x.updated_at||""}</td>
-    </tr>
-  `).join("");
+  try{
+    const q=$("q").value.trim();
+    const r=await apiGet(`/api/products?q=${encodeURIComponent(q)}`);
+    const rows=r.rows||[];
+    $("tbody").innerHTML = rows.map(x=>`
+      <tr>
+        <td><a href="./qr.html?token=${encodeURIComponent(x.code)}">${x.code}</a></td>
+        <td>${x.product_name||""}</td>
+        <td>${x.batch_serial||""}</td>
+        <td>${x.mfg_date||""}</td>
+        <td>${x.exp_date||""}</td>
+        <td>${x.status||""}</td>
+        <td>${x.updated_at||""}</td>
+      </tr>
+    `).join("");
+    setMsg(`Loaded ${rows.length} products ✅`,"ok");
+  }catch(e){
+    setMsg(String(e.message||e),"err");
+  }
 }
 
-$("q").addEventListener("input", load);
-load();
+document.addEventListener("DOMContentLoaded", async ()=>{
+  try{
+    await loadBaseUrl();
+    await load();
+  }catch(e){
+    setMsg("Server chưa sẵn sàng.","err");
+  }
+  $("btnReload").onclick=load;
+  $("q").addEventListener("input", ()=>{ clearTimeout(window.__t); window.__t=setTimeout(load,250); });
+});
 </script>
 </body>
 </html>
