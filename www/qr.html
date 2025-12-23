@@ -1,238 +1,99 @@
 <!doctype html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>QR Factory V2 — Generate (DB thật + Online link)</title>
-
-  <style>
-    :root{
-      --bg:#071022;--panel:#0b1a33;--panel2:#0a1630;
-      --txt:#d7e2ff;--muted:#92a6d6;--line:#1e3566;
-      --ok:#8fffb7;--err:#ff8f8f;--btn:#1e3a8a;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0;background:var(--bg);color:var(--txt);
-      font:14px/1.5 system-ui,Segoe UI,Arial;
-    }
-    .wrap{max-width:1180px;margin:24px auto;padding:18px}
-    .grid{display:grid;grid-template-columns:1fr 420px;gap:18px}
-    .card{
-      background:linear-gradient(180deg,var(--panel),var(--panel2));
-      border:1px solid var(--line);border-radius:18px;padding:18px
-    }
-    h1{margin:0 0 8px 0;font-size:20px}
-    a{color:#9ec1ff;text-decoration:none}
-    a:hover{text-decoration:underline}
-    label{display:block;margin:10px 0 6px;color:var(--muted)}
-    input,textarea,select{
-      width:100%;padding:10px 12px;border-radius:10px;
-      border:1px solid var(--line);background:#071733;color:var(--txt)
-    }
-    textarea{min-height:80px}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    button{
-      padding:10px 14px;border-radius:12px;border:0;
-      background:var(--btn);color:#fff;cursor:pointer
-    }
-    button.secondary{background:#243a6b}
-    button.warn{outline:2px solid #f5c451}
-    button:disabled{opacity:.6;cursor:not-allowed}
-    .msg{margin-top:10px}
-    .msg.ok{color:var(--ok)}
-    .msg.err{color:var(--err)}
-    .qrbox{
-      width:100%;aspect-ratio:1;border:2px dashed var(--line);
-      border-radius:14px;display:flex;align-items:center;justify-content:center
-    }
-    .qrbox img{max-width:100%}
-    .pill{
-      display:inline-block;padding:6px 10px;border-radius:999px;
-      border:1px solid var(--line);margin:6px 0
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QR Factory V2 — Scan</title>
+<style>
+:root{--bg:#071022;--panel:#0b1a33;--panel2:#0a1630;--txt:#d7e2ff;--muted:#92a6d6;--line:#1e3566;--ok:#8fffb7;--err:#ff8f8f}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,Segoe UI,Arial}
+.wrap{max-width:980px;margin:24px auto;padding:18px}
+.card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:18px}
+a{color:#9ec1ff;text-decoration:none} a:hover{text-decoration:underline}
+.row{display:grid;grid-template-columns:160px 1fr;gap:10px;margin-top:10px}
+.k{color:var(--muted)} .msg{margin-top:10px}.ok{color:var(--ok)}.err{color:var(--err)}
+</style>
 </head>
-
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>🎨 QR Factory V2 — Generate (DB thật + Online link)</h1>
-    <div class="pill">
-      • QR in sẵn chứa link: <b>https://…/scan?token=…</b><br>
-      • <a href="./admin.html">Mở Admin dashboard</a>
-    </div>
-  </div>
-
-  <div class="grid">
-    <!-- LEFT -->
-    <div class="card">
-      <label>Product Name</label>
-      <input id="product">
-
-      <label>Batch / Serial</label>
-      <input id="batch">
-
-      <div class="row">
-        <div>
-          <label>MFG Date (dd-mm-yyyy)</label>
-          <input id="mfg">
-        </div>
-        <div>
-          <label>EXP Date (dd-mm-yyyy)</label>
-          <input id="exp">
-        </div>
-      </div>
-
-      <label>Note / Extra</label>
-      <textarea id="note"></textarea>
-
-      <div class="row">
-        <div>
-          <label>Status</label>
-          <select id="status">
-            <option value="active">active</option>
-            <option value="inactive">inactive</option>
-          </select>
-        </div>
-        <div>
-          <label>(Tùy chọn) Code</label>
-          <input id="code" placeholder="Để trống = tự sinh">
-        </div>
-      </div>
-
-      <div class="btns">
-        <button id="btnCreate">Tạo QR (lưu DB)</button>
-        <button id="btnOpen" class="secondary">Mở link scan</button>
-        <button id="btnPng" class="secondary">Tải PNG</button>
-        <button id="btnPdf" class="secondary warn">Tải PDF</button>
-      </div>
-
-      <div id="msg" class="msg"></div>
+    <h2>🧾 Scan Result</h2>
+    <div style="margin:6px 0 12px">
+      <a href="./index.html">← Generate</a> · <a href="./admin.html">Admin</a>
     </div>
 
-    <!-- RIGHT -->
-    <div class="card">
-      <h3>📄 Kết quả</h3>
-      <div class="pill">Code: <span id="outCode">-</span></div><br>
-      <div class="pill">URL: <span id="outUrl">-</span></div>
-      <div class="qrbox" id="qrBox">QR Preview</div>
-    </div>
+    <div id="msg" class="msg"></div>
+
+    <div class="row"><div class="k">Token/Code</div><div id="v_code">-</div></div>
+    <div class="row"><div class="k">Product</div><div id="v_product">-</div></div>
+    <div class="row"><div class="k">Batch</div><div id="v_batch">-</div></div>
+    <div class="row"><div class="k">MFG</div><div id="v_mfg">-</div></div>
+    <div class="row"><div class="k">EXP</div><div id="v_exp">-</div></div>
+    <div class="row"><div class="k">Note</div><div id="v_note">-</div></div>
+    <div class="row"><div class="k">Status</div><div id="v_status">-</div></div>
+    <div class="row"><div class="k">Updated</div><div id="v_updated">-</div></div>
   </div>
 </div>
 
 <script>
-/* ========= helpers ========= */
-const $ = id => document.getElementById(id);
-const msg = (t,cls)=>{ const m=$("msg"); m.textContent=t; m.className="msg "+cls; };
+const $=id=>document.getElementById(id);
+const setMsg=(t,cls)=>{const m=$("msg");m.textContent=t;m.className="msg "+cls;};
 
-let baseUrl = null;
-let lastUrl = null;
-let lastQrDataUrl = null;
+let baseUrl=null;
 
-/* ========= button lock ========= */
-function setButtonsEnabled(on){
-  ["btnCreate","btnOpen","btnPng","btnPdf"].forEach(id=>{
-    const b=$(id);
-    if(!b) return;
-    b.disabled = !on;
-    b.style.opacity = on ? "1" : "0.6";
-    b.style.cursor = on ? "pointer" : "not-allowed";
-  });
+function getToken(){
+  const u=new URL(location.href);
+  // ✅ hỗ trợ cả token= và code=
+  return (u.searchParams.get("token") || u.searchParams.get("code") || "").trim();
 }
 
-/* ========= base url ========= */
 async function loadBaseUrl(){
-  if (window.qrFactory?.getApiBase){
-    const r = await window.qrFactory.getApiBase();
+  if(window.qrFactory?.getApiBase){
+    const r=await window.qrFactory.getApiBase();
     if(!r?.ok) throw new Error("API base not ready");
-    baseUrl = `http://${r.host}:${r.port}`;
-    return;
+    baseUrl=`http://${r.host}:${r.port}`;
+  }else{
+    baseUrl=location.origin;
   }
-  // browser online
-  baseUrl = location.origin;
 }
 
-/* ========= API ========= */
-async function apiPost(path, body){
-  if(window.qrFactory?.apiPost){
-    return await window.qrFactory.apiPost({path, body});
-  }
-  const r = await fetch(baseUrl+path,{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(body)
-  });
-  if(!r.ok) throw new Error(await r.text());
+async function apiGet(path){
+  if(window.qrFactory?.apiGet) return await window.qrFactory.apiGet(path);
+  const r=await fetch(baseUrl+path); if(!r.ok) throw new Error(await r.text());
   return await r.json();
 }
 
-/* ========= actions ========= */
-async function createQr(){
-  const payload={
-    product:$("product").value,
-    batch:$("batch").value,
-    mfg:$("mfg").value,
-    exp:$("exp").value,
-    note:$("note").value,
-    status:$("status").value,
-    code:$("code").value||undefined
-  };
-  const r = await apiPost("/api/qr", payload);
-  $("outCode").textContent = r.code;
-  lastUrl = r.url;
-  $("outUrl").textContent = lastUrl;
-  const img = new Image();
-  img.src = r.qrDataUrl;
-  lastQrDataUrl = r.qrDataUrl;
-  $("qrBox").innerHTML="";
-  $("qrBox").appendChild(img);
-  msg("Tạo QR + lưu DB OK ✅","ok");
-}
+async function load(){
+  const token=getToken();
+  if(!token){
+    setMsg("Thiếu token trên URL. Ví dụ: qr.html?token=QRXXXXX","err");
+    return;
+  }
+  $("v_code").textContent=token;
 
-async function openLink(){
-  if(!lastUrl) return msg("Chưa có URL","err");
-  if(window.qrFactory?.openExternal){
-    await window.qrFactory.openExternal(lastUrl);
-  }else{
-    window.open(lastUrl,"_blank");
+  try{
+    const r=await apiGet(`/api/scan?token=${encodeURIComponent(token)}`);
+    const d=r.data||{};
+    $("v_product").textContent=d.product_name||"-";
+    $("v_batch").textContent=d.batch_serial||"-";
+    $("v_mfg").textContent=d.mfg_date||"-";
+    $("v_exp").textContent=d.exp_date||"-";
+    $("v_note").textContent=d.note_extra||"-";
+    $("v_status").textContent=d.status||"-";
+    $("v_updated").textContent=d.updated_at||"-";
+    setMsg("OK ✅","ok");
+  }catch(e){
+    setMsg(String(e.message||e),"err");
   }
 }
 
-async function dlPng(){
-  if(!lastQrDataUrl) return msg("Chưa có QR","err");
-  if(window.qrFactory?.savePng){
-    await window.qrFactory.savePng({filename:"qr.png", dataUrl:lastQrDataUrl});
-  }else{
-    const a=document.createElement("a");
-    a.href=lastQrDataUrl;a.download="qr.png";a.click();
-  }
-}
-
-async function dlPdf(){
-  if(window.qrFactory?.savePdf){
-    await window.qrFactory.savePdf({filename:"qr.pdf"});
-  }else{
-    window.print();
-  }
-}
-
-/* ========= boot ========= */
 document.addEventListener("DOMContentLoaded", async ()=>{
-  setButtonsEnabled(false);
   try{
     await loadBaseUrl();
-    msg("Ready ✅ Server đã sẵn sàng","ok");
-    setButtonsEnabled(true);
+    await load();
   }catch(e){
-    msg("Không gọi được server. Hãy chạy bằng EXE hoặc server.js.","err");
+    setMsg("Server chưa sẵn sàng.","err");
   }
-
-  $("btnCreate").onclick = ()=>createQr().catch(e=>msg(String(e.message||e),"err"));
-  $("btnOpen").onclick   = ()=>openLink().catch(e=>msg(String(e.message||e),"err"));
-  $("btnPng").onclick    = ()=>dlPng().catch(e=>msg(String(e.message||e),"err"));
-  $("btnPdf").onclick    = ()=>dlPdf().catch(e=>msg(String(e.message||e),"err"));
 });
 </script>
 </body>
