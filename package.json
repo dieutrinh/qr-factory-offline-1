@@ -1,6 +1,6 @@
 {
   "name": "qr-factory-offline",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -19,12 +19,17 @@
     "files": [
       "main.js",
       "preload.js",
-      "package.json",
-      "www/**/*",
-      "node_modules/qrcode/**/*"
+      "www/**",
+      "node_modules/**",
+      "package.json"
     ],
     "win": {
-      "target": "portable"
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "QR Factory Offline.exe"
     }
   }
 }
