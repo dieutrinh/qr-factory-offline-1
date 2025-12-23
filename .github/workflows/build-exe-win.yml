@@ -17,7 +17,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # BỎ cache: npm vì repo chưa có package-lock.json
+          # KHÔNG dùng cache npm vì repo chưa có package-lock.json
 
       - name: Configure npm retry/timeout
         run: |
