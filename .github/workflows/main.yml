@@ -6,22 +6,23 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm install
 
       - name: Build portable EXE
         run: npm run dist:win
 
-      - name: Upload EXE
+      - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QR-Factory-Offline
+          name: QR-Factory-Offline-EXE
           path: dist/*.exe
