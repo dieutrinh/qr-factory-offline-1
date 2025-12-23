@@ -17,10 +17,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
 
       - name: Install deps
-        run: npm ci
+        run: npm install
 
       - name: Smoke test (start then stop)
         run: |
@@ -34,9 +33,6 @@ jobs:
         run: |
           mkdir -p release
           cp -R public src server.js package.json release/
-          # sqlite db sẽ tạo khi chạy, không commit db vào artifact
-          # include lockfile nếu có
-          if [ -f package-lock.json ]; then cp package-lock.json release/; fi
           echo "PORT=3000" > release/.env.example
           echo "BASE_URL=http://localhost:3000" >> release/.env.example
           echo "ADMIN_TOKEN=change-me" >> release/.env.example
