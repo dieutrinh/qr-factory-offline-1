@@ -16,3 +16,113 @@
     await window.qrFactory.savePng({ filename: "qr.png", dataUrl: lastQrDataUrl });
   };
 </script>
+<script>
+  // ===== helpers (work both Electron & Web) =====
+  function hasElectronAPI() {
+    return !!(window.qrFactory && typeof window.qrFactory.toDataUrl === "function");
+  }
+
+  function downloadDataUrl(dataUrl, filename) {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  async function openExternal(url) {
+    if (!url) return;
+    if (hasElectronAPI() && typeof window.qrFactory.openExternal === "function") {
+      return await window.qrFactory.openExternal(url);
+    }
+    window.open(url, "_blank");
+  }
+
+  // ===== bind events safely =====
+  document.addEventListener("DOMContentLoaded", () => {
+    const btnCreate = document.getElementById("btnCreate");
+    const btnOpen   = document.getElementById("btnOpen");
+    const btnPng    = document.getElementById("btnPng");
+    const btnPdf    = document.getElementById("btnPdf");
+
+    // Nếu thiếu ID là biết ngay bạn đang bind sai file/khác ID
+    console.log("[bind]", { btnCreate, btnOpen, btnPng, btnPdf });
+
+    let lastQrDataUrl = "";
+    let lastScanUrl = ""; // bạn set đúng scan URL của bạn vào đây
+
+    btnCreate?.addEventListener("click", async () => {
+      try {
+        alert("btnCreate CLICK ✅"); // test xem nút có vào handler chưa
+
+        // TODO: build payload từ 5 field của bạn (product/batch/mfg/exp/note/status/code...)
+        // lastScanUrl = "...";  // set url scan thực tế
+        // lastQrDataUrl = await window.qrFactory.toDataUrl(lastScanUrl);
+
+        // tạm demo:
+        lastScanUrl = "https://example.com/scan?token=DEMO";
+        if (hasElectronAPI()) {
+          lastQrDataUrl = await window.qrFactory.toDataUrl(lastScanUrl);
+        } else if (window.QRCode && typeof window.QRCode.toDataURL === "function") {
+          lastQrDataUrl = await window.QRCode.toDataURL(lastScanUrl);
+        } else {
+          console.warn("No QR generator found (Electron preload or QR lib).");
+        }
+
+        console.log("scanUrl:", lastScanUrl);
+        console.log("qrDataUrl:", lastQrDataUrl?.slice(0, 50));
+
+        // TODO: update UI preview/img nếu bạn có <img id="qrImg" />
+        const img = document.getElementById("qrImg");
+        if (img && lastQrDataUrl) img.src = lastQrDataUrl;
+
+      } catch (e) {
+        console.error(e);
+        alert("Create error: " + (e?.message || e));
+      }
+    });
+
+    btnOpen?.addEventListener("click", async () => {
+      try {
+        alert("btnOpen CLICK ✅");
+        // Nếu bạn có input scanUrl thì lấy từ đó
+        const el = document.getElementById("scanUrl");
+        const url = (el && el.value) ? el.value : lastScanUrl;
+        await openExternal(url);
+      } catch (e) {
+        console.error(e);
+        alert("Open error: " + (e?.message || e));
+      }
+    });
+
+    btnPng?.addEventListener("click", async () => {
+      try {
+        alert("btnPng CLICK ✅");
+        if (!lastQrDataUrl) return alert("Chưa có QR preview để tải PNG");
+
+        if (hasElectronAPI() && typeof window.qrFactory.savePng === "function") {
+          await window.qrFactory.savePng({ filename: "qr.png", dataUrl: lastQrDataUrl });
+        } else {
+          downloadDataUrl(lastQrDataUrl, "qr.png");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("PNG error: " + (e?.message || e));
+      }
+    });
+
+    btnPdf?.addEventListener("click", async () => {
+      try {
+        alert("btnPdf CLICK ✅");
+
+        // PDF: bạn cần tạo dataUrl PDF (data:application/pdf;base64,...) rồi mới save
+        // Nếu chưa làm PDF generator thì cứ báo rõ:
+        alert("Chưa tạo PDF dataUrl. Cần phần generate PDF rồi mới save.");
+      } catch (e) {
+        console.error(e);
+        alert("PDF error: " + (e?.message || e));
+      }
+    });
+  });
+</script>
