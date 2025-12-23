@@ -3,18 +3,40 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "main": "server.js",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "electron:dev": "electron .",
+    "dist:win": "electron-builder --win portable"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.0.7",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^32.2.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.qrfactory.v2online",
+    "productName": "QR Factory V2 Online",
+    "files": [
+      "server.js",
+      "src/**",
+      "public/**",
+      "electron/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": ["portable"]
+    }
   }
 }
