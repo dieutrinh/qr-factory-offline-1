@@ -1,37 +1,50 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <title>QR Factory Offline</title>
   <style>
-    body { font-family: system-ui; background:#f5f6f7; }
-    .card { background:#fff; padding:40px; margin:80px auto; width:420px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.1); }
-    button { width:100%; padding:12px; font-size:16px; background:#ffc400; border:0; border-radius:8px; cursor:pointer; }
-    img { margin-top:20px; }
-    .err { color:red; margin-top:10px; }
+    body{font-family:system-ui,Arial;background:#f5f6f8;margin:0}
+    .wrap{height:100vh;display:flex;align-items:center;justify-content:center}
+    .card{background:#fff;padding:40px;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.08);width:640px}
+    input{width:100%;padding:14px 12px;font-size:16px}
+    button{width:100%;margin-top:12px;padding:14px 12px;font-size:16px;background:#f4b400;border:0;border-radius:10px;cursor:pointer}
+    #err{color:#c00;margin-top:10px}
+    #out img{margin-top:14px;max-width:260px}
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>✅ QR Factory Offline</h2>
-    <input id="txt" style="width:100%;padding:10px" value="trái sầu riêng, bình phước, 200000đ" />
-    <br><br>
-    <button onclick="gen()">Tạo QR</button>
-    <div id="out"></div>
-    <div id="err" class="err"></div>
+  <div class="wrap">
+    <div class="card">
+      <h2>✅ QR Factory Offline</h2>
+      <div>Tạo QR không cần Internet</div>
+      <br/>
+      <input id="txt" value="trái sầu riêng,,, bình phước, 200000đ, 0903852696, ATP"/>
+      <button id="btn">Tạo QR</button>
+      <div id="err"></div>
+      <div id="out"></div>
+    </div>
   </div>
 
   <script>
-    async function gen() {
+    const $ = (id)=>document.getElementById(id);
+
+    $("btn").addEventListener("click", async () => {
+      $("err").textContent = "";
+      $("out").innerHTML = "";
+
       try {
-        const text = document.getElementById('txt').value;
-        const url = await window.qrFactory.toDataUrl(text);
-        document.getElementById('out').innerHTML = '<img src="' + url + '"/>';
-        document.getElementById('err').innerText = '';
+        if (!window.qrFactory || !window.qrFactory.toDataUrl) {
+          throw new Error("Bridge preload chưa sẵn sàng (window.qrFactory missing).");
+        }
+        const dataUrl = await window.qrFactory.toDataUrl($("txt").value);
+        const img = document.createElement("img");
+        img.src = dataUrl;
+        $("out").appendChild(img);
       } catch (e) {
-        document.getElementById('err').innerText = e.message;
+        $("err").textContent = e?.message || String(e);
       }
-    }
+    });
   </script>
 </body>
 </html>
