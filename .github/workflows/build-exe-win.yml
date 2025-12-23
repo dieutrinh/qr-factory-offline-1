@@ -33,7 +33,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Build portable EXE
-        run: npm run dist
+        run: npm run dist:win
 
       - name: List dist
         run: |
