@@ -1,128 +1,82 @@
-<button type="button" id="btnCreate">Tạo QR (lưu DB)</button>
-<button type="button" id="btnOpen">Mở link scan</button>
-<button type="button" id="btnPng">Tải PNG</button>
-<button type="button" id="btnPdf">Tải PDF</button>
-
-<script>
-  // ví dụ
-  let lastQrDataUrl = "";
-
-  document.getElementById("btnOpen").onclick = async () => {
-    const url = document.getElementById("scanUrl").value; // hoặc nơi bạn đang giữ
-    await window.qrFactory.openExternal(url);
-  };
-
-  document.getElementById("btnPng").onclick = async () => {
-    await window.qrFactory.savePng({ filename: "qr.png", dataUrl: lastQrDataUrl });
-  };
-</script>
-<script>
-  // ===== helpers (work both Electron & Web) =====
-  function hasElectronAPI() {
-    return !!(window.qrFactory && typeof window.qrFactory.toDataUrl === "function");
-  }
-
-  function downloadDataUrl(dataUrl, filename) {
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
-
-  async function openExternal(url) {
-    if (!url) return;
-    if (hasElectronAPI() && typeof window.qrFactory.openExternal === "function") {
-      return await window.qrFactory.openExternal(url);
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QR Factory V2 — Generate</title>
+  <style>
+    :root{
+      --bg:#071022; --panel:#0b1a33; --panel2:#0a1630;
+      --txt:#d7e2ff; --muted:#92a6d6; --line:#1e3566;
+      --btn:#2f6bff; --btn2:#203a70; --warn:#ffcc66;
     }
-    window.open(url, "_blank");
-  }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,Segoe UI,Arial}
+    .wrap{padding:18px}
+    .grid{display:grid;grid-template-columns: 1.15fr 0.85fr;gap:18px;align-items:start}
+    .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:16px}
+    h1{font-size:20px;margin:0 0 10px}
+    .sub{color:var(--muted);margin:0 0 10px}
+    hr{border:none;border-top:1px solid var(--line);margin:12px 0}
+    label{display:block;color:var(--muted);margin:10px 0 6px}
+    input, textarea, select{
+      width:100%; padding:12px 12px; border-radius:12px;
+      border:1px solid var(--line); outline:none;
+      background:#060f22; color:var(--txt);
+    }
+    textarea{min-height:76px; resize:vertical}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .row2b{display:grid;grid-template-columns:1fr 1fr;gap:12px; align-items:end}
+    .btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button{
+      border:1px solid var(--line); border-radius:12px;
+      padding:10px 14px; color:var(--txt); background:var(--btn2);
+      cursor:pointer; font-weight:600;
+    }
+    button.primary{background:var(--btn);border-color:#2f6bff}
+    button.warn{outline:2px solid var(--warn); outline-offset:1px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#081636;color:var(--muted)}
+    .resultBox{display:flex;flex-direction:column;gap:10px}
+    .qrBox{
+      width:220px; height:220px; border-radius:16px; border:1px dashed var(--line);
+      display:flex; align-items:center; justify-content:center; background:#06102a;
+      overflow:hidden;
+    }
+    .qrBox img{width:100%;height:100%;object-fit:contain}
+    .tip{color:var(--muted);font-size:13px}
+    .err{color:#ff8f8f;font-size:13px;margin-top:6px}
+    .ok{color:#8fffb7;font-size:13px;margin-top:6px}
+    .small{font-size:12px;color:var(--muted)}
+  </style>
+</head>
 
-  // ===== bind events safely =====
-  document.addEventListener("DOMContentLoaded", () => {
-    const btnCreate = document.getElementById("btnCreate");
-    const btnOpen   = document.getElementById("btnOpen");
-    const btnPng    = document.getElementById("btnPng");
-    const btnPdf    = document.getElementById("btnPdf");
+<body>
+<div class="wrap">
+  <div class="grid">
+    <!-- LEFT: form -->
+    <div class="card">
+      <h1>🎨 QR Factory V2 Online — Tạo QR động (5 fields)</h1>
+      <p class="sub">• QR in sẵn chứa <b>đường link</b> (ví dụ https://.../scan?token=...) — scan sẽ đọc dữ liệu mới nhất từ DB.</p>
+      <hr />
 
-    // Nếu thiếu ID là biết ngay bạn đang bind sai file/khác ID
-    console.log("[bind]", { btnCreate, btnOpen, btnPng, btnPdf });
+      <label>Product Name</label>
+      <input id="productName" placeholder="vd: bánh tráng trộn" />
 
-    let lastQrDataUrl = "";
-    let lastScanUrl = ""; // bạn set đúng scan URL của bạn vào đây
+      <label>Batch/Serial</label>
+      <input id="batchSerial" placeholder="vd: lô ca 2" />
 
-    btnCreate?.addEventListener("click", async () => {
-      try {
-        alert("btnCreate CLICK ✅"); // test xem nút có vào handler chưa
+      <div class="row2">
+        <div>
+          <label>MFG Date (dd-mm-yyyy)</label>
+          <input id="mfgDate" placeholder="23-12-2025" />
+          <div id="mfgErr" class="err" style="display:none"></div>
+        </div>
+        <div>
+          <label>EXP Date (dd-mm-yyyy)</label>
+          <input id="expDate" placeholder="24-12-2025" />
+          <div id="expErr" class="err" style="display:none"></div>
+        </div>
+      </div>
 
-        // TODO: build payload từ 5 field của bạn (product/batch/mfg/exp/note/status/code...)
-        // lastScanUrl = "...";  // set url scan thực tế
-        // lastQrDataUrl = await window.qrFactory.toDataUrl(lastScanUrl);
-
-        // tạm demo:
-        lastScanUrl = "https://example.com/scan?token=DEMO";
-        if (hasElectronAPI()) {
-          lastQrDataUrl = await window.qrFactory.toDataUrl(lastScanUrl);
-        } else if (window.QRCode && typeof window.QRCode.toDataURL === "function") {
-          lastQrDataUrl = await window.QRCode.toDataURL(lastScanUrl);
-        } else {
-          console.warn("No QR generator found (Electron preload or QR lib).");
-        }
-
-        console.log("scanUrl:", lastScanUrl);
-        console.log("qrDataUrl:", lastQrDataUrl?.slice(0, 50));
-
-        // TODO: update UI preview/img nếu bạn có <img id="qrImg" />
-        const img = document.getElementById("qrImg");
-        if (img && lastQrDataUrl) img.src = lastQrDataUrl;
-
-      } catch (e) {
-        console.error(e);
-        alert("Create error: " + (e?.message || e));
-      }
-    });
-
-    btnOpen?.addEventListener("click", async () => {
-      try {
-        alert("btnOpen CLICK ✅");
-        // Nếu bạn có input scanUrl thì lấy từ đó
-        const el = document.getElementById("scanUrl");
-        const url = (el && el.value) ? el.value : lastScanUrl;
-        await openExternal(url);
-      } catch (e) {
-        console.error(e);
-        alert("Open error: " + (e?.message || e));
-      }
-    });
-
-    btnPng?.addEventListener("click", async () => {
-      try {
-        alert("btnPng CLICK ✅");
-        if (!lastQrDataUrl) return alert("Chưa có QR preview để tải PNG");
-
-        if (hasElectronAPI() && typeof window.qrFactory.savePng === "function") {
-          await window.qrFactory.savePng({ filename: "qr.png", dataUrl: lastQrDataUrl });
-        } else {
-          downloadDataUrl(lastQrDataUrl, "qr.png");
-        }
-      } catch (e) {
-        console.error(e);
-        alert("PNG error: " + (e?.message || e));
-      }
-    });
-
-    btnPdf?.addEventListener("click", async () => {
-      try {
-        alert("btnPdf CLICK ✅");
-
-        // PDF: bạn cần tạo dataUrl PDF (data:application/pdf;base64,...) rồi mới save
-        // Nếu chưa làm PDF generator thì cứ báo rõ:
-        alert("Chưa tạo PDF dataUrl. Cần phần generate PDF rồi mới save.");
-      } catch (e) {
-        console.error(e);
-        alert("PDF error: " + (e?.message || e));
-      }
-    });
-  });
-</script>
+      <label>Note/Extra</label>
+      <text
