@@ -1,46 +1,11 @@
-name: Build ZIP
+name: Build ZIP (manual only)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ "main" ]
 
 jobs:
   build_zip:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install deps
-        run: npm install
-
-      - name: Smoke test (start then stop)
-        run: |
-          node -v
-          node server.js &
-          sleep 2
-          curl -s http://localhost:3000/api/health | head -c 200
-          pkill -f "node server.js" || true
-
-      - name: Make release folder
-        run: |
-          mkdir -p release
-          cp -R src server.js package.json release/
-
-      - name: Zip
-        run: |
-          cd release
-          zip -r ../qr-factory-v2-online.zip .
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: qr-factory-v2-online
-          path: qr-factory-v2-online.zip
+      - uses: actions/checkout@v4
+      - run: echo "Disabled auto-zip. Use build-exe-win.yml for EXE."
