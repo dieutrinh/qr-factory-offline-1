@@ -1,56 +1,77 @@
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { pathToFileURL } = require("url");
 
-function log(msg) {
-  try {
-    const p = path.join(app.getPath("userData"), "app.log");
-    fs.appendFileSync(p, `[${new Date().toISOString()}] ${msg}\n`);
-  } catch {}
+let mainWindow;
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 780,
+    webPreferences: {
+      preload: path.join(__dirname, "..", "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  // ✅ CHỈ LOAD www/index.html (đừng load public/** nữa)
+  mainWindow.loadFile(path.join(__dirname, "..", "www", "index.html"));
+
+  // Mở devtools nếu cần
+  // mainWindow.webContents.openDevTools({ mode: "detach" });
 }
 
-async function boot() {
-  try {
-    // DB ở userData (đảm bảo ghi được khi portable)
-    process.env.DB_FILE = path.join(app.getPath("userData"), "data.sqlite");
+app.whenReady().then(() => {
+  createWindow();
 
-    const appPath = app.getAppPath();        // ...\resources\app.asar
-    const serverPath = path.join(appPath, "server.js");
-    const serverUrl = pathToFileURL(serverPath).href;
-
-    log(`appPath=${appPath}`);
-    log(`serverPath=${serverPath}`);
-    log(`DB_FILE=${process.env.DB_FILE}`);
-
-    const mod = await import(serverUrl);
-    if (!mod.startServer) throw new Error("startServer() not found in server.js");
-
-    const { port } = await mod.startServer(0);
-    log(`server started port=${port}`);
-
-    const win = new BrowserWindow({
-      width: 1200,
-      height: 800,
-      show: true,
-      webPreferences: { contextIsolation: true }
-    });
-
-    win.on("closed", () => {
-      app.quit();
-    });
-
-    await win.loadURL(`http://127.0.0.1:${port}/`);
-  } catch (e) {
-    const msg = e && e.stack ? e.stack : String(e);
-    log(`FATAL: ${msg}`);
-    dialog.showErrorBox("QR Factory V2 Online - Crash", msg);
-    app.quit();
-  }
-}
-
-app.whenReady().then(boot);
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
 
 app.on("window-all-closed", () => {
-  app.quit();
+  if (process.platform !== "darwin") app.quit();
 });
+
+// ===== IPC: open link =====
+ipcMain.handle("open-external", async (_e, url) => {
+  if (!url) return { ok: false, error: "Empty URL" };
+  await shell.openExternal(String(url));
+  return { ok: true };
+});
+
+// ===== IPC: save PNG (data:image/png;base64,...) =====
+ipcMain.handle("save-png", async (_e, { filename = "qr.png", dataUrl }) => {
+  if (!dataUrl || !String(dataUrl).startsWith("data:image")) {
+    return { ok: false, error: "PNG dataUrl invalid" };
+  }
+
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: "Save PNG",
+    defaultPath: filename,
+    filters: [{ name: "PNG Image", extensions: ["png"] }],
+  });
+
+  if (canceled || !filePath) return { ok: false, canceled: true };
+
+  const base64 = String(dataUrl).split(",")[1];
+  await fs.promises.writeFile(filePath, Buffer.from(base64, "base64"));
+  return { ok: true, filePath };
+});
+
+// ===== IPC: save PDF bằng printToPDF của chính cửa sổ hiện tại =====
+ipcMain.handle("save-pdf", async (event, { filename = "qr.pdf" }) => {
+  const wc = event.sender; // webContents của renderer
+
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: "Save PDF",
+    defaultPath: filename,
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+
+  if (canceled || !filePath) return { ok: false, canceled: true };
+
+  const pdfBuffer = await wc.printToPDF({
+    printBackground:
