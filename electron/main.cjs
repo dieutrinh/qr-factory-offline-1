@@ -1,22 +1,23 @@
-process.on("uncaughtException", (err) => {
-  const fs = require("fs");
-  try {
-    fs.writeFileSync("main-crash.log", String(err && (err.stack || err)), "utf8");
-  } catch {}
-});
-process.on("unhandledRejection", (err) => {
-  const fs = require("fs");
-  try {
-    fs.writeFileSync("main-crash.log", String(err && (err.stack || err)), "utf8");
-  } catch {}
-});
-const { spawn } = require("child_process");
-let serverProc = null;
+// electron/main.cjs
+"use strict";
+
 const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { spawn } = require("child_process");
 
-let mainWindow;
+let mainWindow = null;
+let serverProc = null;
+
+function safeWriteLog(name, msg) {
+  try {
+    fs.writeFileSync(path.join(process.cwd(), name), String(msg), "utf8");
+  } catch {}
+}
+
+// Log crash ra file (để không “im lặng”)
+process.on("uncaughtException", (err) => safeWriteLog("main-crash.log", err?.stack || err));
+process.on("unhandledRejection", (err) => safeWriteLog("main-crash.log", err?.stack || err));
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -26,70 +27,32 @@ function createWindow() {
       preload: path.join(__dirname, "..", "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
-    },
+      sandbox: false
+    }
   });
 
-  // ✅ CHỈ LOAD www/index.html (đừng load public/** nữa)
+  // ✅ Luôn load đúng www/index.html
   mainWindow.loadFile(path.join(__dirname, "..", "www", "index.html"));
 
-  // Mở devtools nếu cần
+  // Bật khi cần debug
   // mainWindow.webContents.openDevTools({ mode: "detach" });
 }
 
+function maybeStartServer() {
+  // Nếu bạn có server.js thì tự chạy, còn không có thì bỏ qua để khỏi crash
+  const serverPath = path.join(__dirname, "..", "server.js");
+  if (!fs.existsSync(serverPath)) return;
+
+  try {
+    serverProc = spawn(process.execPath, [serverPath], { stdio: "inherit" });
+    serverProc.on("error", (e) => safeWriteLog("server-crash.log", e?.stack || e));
+  } catch (e) {
+    safeWriteLog("server-crash.log", e?.stack || e);
+  }
+}
+
 app.whenReady().then(() => {
- // auto start server
-const serverPath = path.join(__dirname, "..", "server.js");
-serverProc = spawn(process.execPath, [serverPath], { stdio: "inherit" });
+  maybeStartServer();
   createWindow();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-  if (serverProc) serverProc.kill();
-});
-
-// ===== IPC: open link =====
-ipcMain.handle("open-external", async (_e, url) => {
-  if (!url) return { ok: false, error: "Empty URL" };
-  await shell.openExternal(String(url));
-  return { ok: true };
-});
-
-// ===== IPC: save PNG (data:image/png;base64,...) =====
-ipcMain.handle("save-png", async (_e, { filename = "qr.png", dataUrl }) => {
-  if (!dataUrl || !String(dataUrl).startsWith("data:image")) {
-    return { ok: false, error: "PNG dataUrl invalid" };
-  }
-
-  const { canceled, filePath } = await dialog.showSaveDialog({
-    title: "Save PNG",
-    defaultPath: filename,
-    filters: [{ name: "PNG Image", extensions: ["png"] }],
-  });
-
-  if (canceled || !filePath) return { ok: false, canceled: true };
-
-  const base64 = String(dataUrl).split(",")[1];
-  await fs.promises.writeFile(filePath, Buffer.from(base64, "base64"));
-  return { ok: true, filePath };
-});
-
-// ===== IPC: save PDF bằng printToPDF của chính cửa sổ hiện tại =====
-ipcMain.handle("save-pdf", async (event, { filename = "qr.pdf" }) => {
-  const wc = event.sender; // webContents của renderer
-
-  const { canceled, filePath } = await dialog.showSaveDialog({
-    title: "Save PDF",
-    defaultPath: filename,
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-  });
-
-  if (canceled || !filePath) return { ok: false, canceled: true };
-
-  const pdfBuffer = await wc.printToPDF({
-    printBackground:
+  a
