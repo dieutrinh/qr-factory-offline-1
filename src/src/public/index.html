@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR Factory V2 — Generate</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:24px;background:#0b1220;color:#e8eefc}
+    .wrap{max-width:1100px;margin:auto;display:grid;grid-template-columns:1.1fr .9fr;gap:16px}
+    .card{background:#101a33;border:1px solid #22325f;border-radius:16px;padding:16px}
+    h1{margin:0 0 12px;font-size:20px}
+    label{display:block;font-size:12px;color:#b8c7ff;margin:10px 0 6px}
+    input,textarea{width:100%;box-sizing:border-box;padding:10px;border-radius:12px;border:1px solid #2b3a6d;background:#0b1220;color:#e8eefc}
+    textarea{min-height:80px;resize:vertical}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    button{cursor:pointer;border:none;border-radius:12px;padding:10px 12px;background:#4f7cff;color:#07102a;font-weight:700}
+    button.secondary{background:#22325f;color:#e8eefc}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .muted{color:#9bb0f5;font-size:12px}
+    img{max-width:100%;background:#fff;border-radius:12px;padding:8px}
+    .pill{display:inline-block;background:#1a2a55;border:1px solid #2b3a6d;color:#b8c7ff;padding:6px 10px;border-radius:999px;font-size:12px}
+    a{color:#9bb0f5}
+    .code{font-family:ui-monospace,Menlo,Consolas,monospace}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>🎨 QR Factory V2 — Tạo QR động (5 fields)</h1>
+      <div class="muted">
+        QR sẽ trỏ về <span class="code">/q/&lt;code&gt;</span>.
+        Admin dashboard: <a href="/admin">/admin</a>
+      </div>
+
+      <label>Product Name</label>
+      <input id="productName" placeholder="Ví dụ: Nước giải khát Xá Xị 330ml" />
+
+      <label>Batch/Serial</label>
+      <input id="batch" placeholder="Ví dụ: BATCH-2025-12-23" />
+
+      <div class="row">
+        <div>
+          <label>MFG Date</label>
+          <input id="mfgDate" placeholder="YYYY-MM-DD" />
+        </div>
+        <div>
+          <label>EXP Date</label>
+          <input id="expDate" placeholder="YYYY-MM-DD" />
+        </div>
+      </div>
+
+      <label>Note/Extra</label>
+      <textarea id="note" placeholder="Ghi chú thêm..."></textarea>
+
+      <div class="actions">
+        <button id="btnCreate">Tạo QR (lưu DB)</button>
+        <button class="secondary" id="btnOpen">Mở link scan</button>
+      </div>
+
+      <div class="actions">
+        <button class="secondary" id="btnPng">Tải PNG</button>
+        <button class="secondary" id="btnPdf">Tải PDF</button>
+      </div>
+
+      <p class="muted" id="msg"></p>
+    </div>
+
+    <div class="card">
+      <h1>🧾 Kết quả</h1>
+      <div class="pill">Code: <span class="code" id="code">—</span></div>
+      <div style="height:10px"></div>
+      <div class="pill">URL: <span class="code" id="url">—</span></div>
+      <div style="height:14px"></div>
+      <img id="qrImg" alt="QR Preview" />
+      <div style="height:8px"></div>
+      <div class="muted">Tip: set <span class="code">BASE_URL</span> khi deploy để QR in ra trỏ đúng domain.</div>
+    </div>
+  </div>
+
+  <script>
+    let currentCode = "";
+    let currentUrl = "";
+
+    function val(id){ return document.getElementById(id).value.trim(); }
+    function setMsg(t){ document.getElementById("msg").textContent = t; }
+
+    async function create() {
+      setMsg("Đang tạo...");
+      const payload = {
+        productName: val("productName"),
+        batch: val("batch"),
+        mfgDate: val("mfgDate"),
+        expDate: val("expDate"),
+        note: val("note"),
+        status: "active"
+      };
+      const r = await fetch("/api/admin/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      if (!j.ok) { setMsg("Lỗi: " + (j.error || "unknown")); return; }
+
+      currentCode = j.code;
+      currentUrl = j.url;
+
+      document.getElementById("code").textContent = currentCode;
+      document.getElementById("url").textContent = currentUrl;
+
+      // preview QR using server export (png)
+      const img = document.getElementById("qrImg");
+      img.src = "/api/admin/export?format=png&code=" + encodeURIComponent(currentCode);
+      setMsg("✅ Tạo xong!");
+    }
+
+    function openScan() {
+      if (!currentUrl) return setMsg("Chưa có QR. Bấm 'Tạo QR' trước.");
+      window.open(currentUrl, "_blank");
+    }
+
+    function download(fmt) {
+      if (!currentCode) return setMsg("Chưa có QR. Bấm 'Tạo QR' trước.");
+      const url = "/api/admin/export?format=" + fmt + "&code=" + encodeURIComponent(currentCode);
+      window.open(url, "_blank");
+    }
+
+    document.getElementById("btnCreate").addEventListener("click", create);
+    document.getElementById("btnOpen").addEventListener("click", openScan);
+    document.getElementById("btnPng").addEventListener("click", () => download("png"));
+    document.getElementById("btnPdf").addEventListener("click", () => download("pdf"));
+  </script>
+</body>
+</html>
