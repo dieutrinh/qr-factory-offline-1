@@ -1,50 +1,37 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QR Factory Offline</title>
-    <style>
-      body{font-family:system-ui,Arial;margin:0;background:#f5f6f8}
-      .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}
-      .card{background:#fff;border-radius:14px;padding:28px;box-shadow:0 10px 30px rgba(0,0,0,.08);width:560px}
-      h1{margin:0 0 8px 0;font-size:26px}
-      p{margin:0 0 14px 0;color:#555}
-      input{width:100%;padding:12px 14px;font-size:16px;border:1px solid #ddd;border-radius:10px;outline:none}
-      button{margin-top:12px;width:100%;padding:12px 14px;font-size:16px;border-radius:10px;border:1px solid #caa000;background:#ffcc00;cursor:pointer}
-      #out{margin-top:16px;display:flex;justify-content:center}
-      #err{margin-top:10px;color:#b00020;white-space:pre-wrap}
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <div class="card">
-        <h1>✅ QR Factory Offline</h1>
-        <p>Tạo QR không cần Internet</p>
+<head>
+  <meta charset="UTF-8" />
+  <title>QR Factory Offline</title>
+  <style>
+    body { font-family: system-ui; background:#f5f6f7; }
+    .card { background:#fff; padding:40px; margin:80px auto; width:420px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.1); }
+    button { width:100%; padding:12px; font-size:16px; background:#ffc400; border:0; border-radius:8px; cursor:pointer; }
+    img { margin-top:20px; }
+    .err { color:red; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>✅ QR Factory Offline</h2>
+    <input id="txt" style="width:100%;padding:10px" value="trái sầu riêng, bình phước, 200000đ" />
+    <br><br>
+    <button onclick="gen()">Tạo QR</button>
+    <div id="out"></div>
+    <div id="err" class="err"></div>
+  </div>
 
-        <input id="txt" value="trái sầu riêng,,, bình phước, 200000đ, 0903852696, ATP" />
-        <button id="btn">Tạo QR</button>
-
-        <div id="err"></div>
-        <div id="out"></div>
-      </div>
-    </div>
-
-    <script>
-      const $ = (id) => document.getElementById(id);
-      $('btn').addEventListener('click', async () => {
-        $('err').textContent = '';
-        $('out').innerHTML = '';
-        try {
-          const dataUrl = await window.qrFactory.toDataUrl($('txt').value);
-          const img = new Image();
-          img.src = dataUrl;
-          img.width = 320;
-          $('out').appendChild(img);
-        } catch (e) {
-          $('err').textContent = String(e && e.message ? e.message : e);
-        }
-      });
-    </script>
-  </body>
+  <script>
+    async function gen() {
+      try {
+        const text = document.getElementById('txt').value;
+        const url = await window.qrFactory.toDataUrl(text);
+        document.getElementById('out').innerHTML = '<img src="' + url + '"/>';
+        document.getElementById('err').innerText = '';
+      } catch (e) {
+        document.getElementById('err').innerText = e.message;
+      }
+    }
+  </script>
+</body>
 </html>
