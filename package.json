@@ -1,3 +1,7 @@
+"scripts": {
+  "start": "electron .",
+  "dist:win": "electron-builder --win portable"
+}
 {
   "build": {
     "asar": true,
