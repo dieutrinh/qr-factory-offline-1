@@ -1,227 +1,159 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
-const http = require("http");
-const net = require("net");
 
-let win = null;
+let mainWin = null;
 let serverProc = null;
+let baseUrl = ""; // http://127.0.0.1:xxxxx
 
-const API_HOST = "127.0.0.1";
-let API_PORT = null;
-
-/* ===== Single instance ===== */
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) app.quit();
-app.on("second-instance", () => {
-  if (win) {
-    if (win.isMinimized()) win.restore();
-    win.focus();
+function findIndexHtml() {
+  // ✅ chịu được lộn thư mục www/www
+  const candidates = [
+    path.join(app.getAppPath(), "www", "index.html"),
+    path.join(app.getAppPath(), "www", "www", "index.html"),
+    path.join(__dirname, "..", "www", "index.html"),
+    path.join(__dirname, "..", "www", "www", "index.html"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
   }
-});
+  return candidates[0];
+}
 
-/* ===== Free port ===== */
-function getFreePort() {
+function startServer() {
   return new Promise((resolve, reject) => {
-    const s = net.createServer();
-    s.unref();
-    s.on("error", reject);
-    s.listen(0, API_HOST, () => {
-      const { port } = s.address();
-      s.close(() => resolve(port));
+    const serverJs = path.join(app.getAppPath(), "server.js");
+    const env = {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+      PORT: "0", // ✅ port động
+      APP_DB_DIR: app.getPath("userData"), // ✅ DB ổn định theo máy user
+    };
+
+    serverProc = spawn(process.execPath, [serverJs], { env, stdio: ["ignore", "pipe", "pipe"] });
+
+    let done = false;
+    const timeout = setTimeout(() => {
+      if (done) return;
+      done = true;
+      reject(new Error("Server start timeout"));
+    }, 10000);
+
+    const onData = (buf) => {
+      const s = String(buf);
+      // console.log(s);
+      const m = s.match(/__PORT__=(\d+)/);
+      if (m && !done) {
+        const port = Number(m[1]);
+        baseUrl = `http://127.0.0.1:${port}`;
+        clearTimeout(timeout);
+        done = true;
+        resolve();
+      }
+    };
+
+    serverProc.stdout.on("data", onData);
+    serverProc.stderr.on("data", onData);
+
+    serverProc.on("exit", (code) => {
+      if (done) return;
+      clearTimeout(timeout);
+      done = true;
+      reject(new Error("Server crashed, code=" + code));
     });
   });
 }
 
-/* ===== Ping /api/health ===== */
-function pingHealth(host, port, timeoutMs = 25000) {
-  const started = Date.now();
-  return new Promise((resolve) => {
-    const tick = () => {
-      const req = http.request(
-        { hostname: host, port, path: "/api/health", method: "GET", timeout: 2500 },
-        (res) => {
-          res.resume();
-          if (res.statusCode === 200) return resolve(true);
-          if (Date.now() - started > timeoutMs) return resolve(false);
-          setTimeout(tick, 300);
-        }
-      );
-      req.on("timeout", () => req.destroy());
-      req.on("error", () => {
-        if (Date.now() - started > timeoutMs) return resolve(false);
-        setTimeout(tick, 300);
-      });
-      req.end();
-    };
-    tick();
-  });
-}
-
-/* ===== Start server (IMPORTANT: ELECTRON_RUN_AS_NODE) ===== */
-function startServer() {
-  const serverPath = path.join(__dirname, "..", "server.js");
-  if (!fs.existsSync(serverPath)) {
-    throw new Error(`Không thấy server.js tại: ${serverPath}`);
-  }
-
-  serverProc = spawn(process.execPath, [serverPath], {
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      PORT: String(API_PORT),
-
-      // ✅ THIS FIXES PACKAGED EXE:
-      // chạy app.exe như Node để execute server.js
-      ELECTRON_RUN_AS_NODE: "1"
-    }
-  });
-
-  serverProc.on("exit", (code) => {
-    try { win?.webContents?.send("server-exit", { code }); } catch {}
-  });
-}
-
-/* ===== Proxy requests ===== */
-function httpRequest({ method, path: apiPath, body }) {
-  return new Promise((resolve, reject) => {
-    const payload = body ? JSON.stringify(body) : "";
-    const req = http.request(
-      {
-        hostname: API_HOST,
-        port: API_PORT,
-        path: apiPath,
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(payload)
-        }
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => {
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            return reject(new Error(`API ${res.statusCode}: ${data}`));
-          }
-          try { resolve(JSON.parse(data)); } catch { resolve(data); }
-        });
-      }
-    );
-    req.on("error", reject);
-    if (payload) req.write(payload);
-    req.end();
-  });
-}
-
-/* ===== Window ===== */
-function createWindow() {
-  win = new BrowserWindow({
+async function createWindow() {
+  mainWin = new BrowserWindow({
     width: 1200,
-    height: 780,
+    height: 760,
     webPreferences: {
-      preload: path.join(__dirname, "..", "preload.js"),
+      preload: path.join(app.getAppPath(), "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
-    }
+    },
   });
 
-  win.loadFile(path.join(__dirname, "..", "www", "index.html"));
-
-  // chặn mở “tab/window” trong app
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: "deny" };
+  // ✅ nếu load fail thì show lỗi (không trắng)
+  mainWin.webContents.on("did-fail-load", (_e, code, desc) => {
+    mainWin.loadURL(
+      "data:text/plain;charset=utf-8," +
+        encodeURIComponent(`Failed to load UI. (${code}) ${desc}`)
+    );
   });
 
-  win.on("close", () => {
-    try { if (serverProc) serverProc.kill(); } catch {}
-  });
+  await mainWin.loadFile(findIndexHtml());
 }
 
-/* ===== Lifecycle ===== */
 app.whenReady().then(async () => {
   try {
-    API_PORT = await getFreePort();
-    startServer();
-
-    const ok = await pingHealth(API_HOST, API_PORT, 25000);
-    if (!ok) {
-      await dialog.showMessageBox({
-        type: "error",
-        title: "Server không chạy",
-        message:
-          "Không khởi động được server nội bộ.\n\n" +
-          "Nguyên nhân thường gặp: lỗi better-sqlite3, thiếu module, hoặc server.js crash.\n\n" +
-          "Nếu cần debug: mở CMD tại thư mục project và chạy: npm run server"
-      });
-      app.quit();
-      return;
-    }
-
-    createWindow();
-    win.webContents.on("did-finish-load", () => {
-      win.webContents.send("server-ready", { ok: true, host: API_HOST, port: API_PORT });
-    });
+    await startServer();   // ✅ tự start server, port động
+    await createWindow();  // ✅ rồi mới mở UI
   } catch (e) {
-    await dialog.showMessageBox({
-      type: "error",
-      title: "Lỗi khởi động",
-      message: String(e?.message || e)
-    });
-    app.quit();
+    const w = new BrowserWindow({ width: 900, height: 520 });
+    w.loadURL("data:text/plain;charset=utf-8," + encodeURIComponent(String(e.stack || e)));
   }
 });
 
 app.on("window-all-closed", () => {
-  try { if (serverProc) serverProc.kill(); } catch {}
   if (process.platform !== "darwin") app.quit();
 });
 
-/* ===== IPC ===== */
+app.on("before-quit", () => {
+  try { serverProc?.kill(); } catch {}
+});
+
+// ===== IPC: API proxy (renderer không cần biết port) =====
+async function callApi(method, p, body) {
+  if (!baseUrl) throw new Error("Server not ready");
+  const url = baseUrl + p;
+  const r = await fetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`API ${r.status}: ${text}`);
+  try { return JSON.parse(text); } catch { return { ok: true, text }; }
+}
+
+ipcMain.handle("api-get", async (_e, { path: p }) => callApi("GET", p));
+ipcMain.handle("api-post", async (_e, { path: p, body }) => callApi("POST", p, body));
+
 ipcMain.handle("open-external", async (_e, url) => {
-  if (!url) return { ok: false, error: "Empty URL" };
-  await shell.openExternal(String(url));
-  return { ok: true };
+  if (!url) return;
+  // nếu là link tương đối -> convert sang BASE_URL
+  if (typeof url === "string" && url.startsWith("/")) url = baseUrl + url;
+  await shell.openExternal(url);
 });
 
-// ✅ Backward compatible: accept (string) or ({path})
-ipcMain.handle("api-get", async (_e, arg) => {
-  const apiPath = typeof arg === "string" ? arg : (arg?.path || "");
-  return await httpRequest({ method: "GET", path: apiPath });
-});
-
-// ✅ Backward compatible: accept ({path,body}) or (path, body)
-ipcMain.handle("api-post", async (_e, arg) => {
-  if (typeof arg === "string") return await httpRequest({ method: "POST", path: arg, body: {} });
-  return await httpRequest({ method: "POST", path: arg?.path || "", body: arg?.body || {} });
-});
+function dataUrlToBuffer(dataUrl) {
+  const m = String(dataUrl).match(/^data:(.+);base64,(.*)$/);
+  if (!m) throw new Error("Invalid dataUrl");
+  return Buffer.from(m[2], "base64");
+}
 
 ipcMain.handle("save-png", async (_e, { filename = "qr.png", dataUrl }) => {
-  if (!dataUrl || !String(dataUrl).startsWith("data:image")) return { ok: false, error: "PNG dataUrl invalid" };
   const { canceled, filePath } = await dialog.showSaveDialog({
-    title: "Save PNG",
     defaultPath: filename,
-    filters: [{ name: "PNG", extensions: ["png"] }]
+    filters: [{ name: "PNG", extensions: ["png"] }],
   });
   if (canceled || !filePath) return { ok: false, canceled: true };
-  const base64 = String(dataUrl).split(",")[1] || "";
-  await fs.promises.writeFile(filePath, Buffer.from(base64, "base64"));
+  fs.writeFileSync(filePath, dataUrlToBuffer(dataUrl));
   return { ok: true, filePath };
 });
 
-ipcMain.handle("save-pdf", async (event, { filename = "qr.pdf" }) => {
+ipcMain.handle("save-pdf", async (_e, { filename = "qr.pdf" } = {}) => {
   const { canceled, filePath } = await dialog.showSaveDialog({
-    title: "Save PDF",
     defaultPath: filename,
-    filters: [{ name: "PDF", extensions: ["pdf"] }]
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
   });
   if (canceled || !filePath) return { ok: false, canceled: true };
-  const pdf = await event.sender.printToPDF({ printBackground: true, pageSize: "A4" });
-  await fs.promises.writeFile(filePath, pdf);
+  const pdf = await mainWin.webContents.printToPDF({ printBackground: true });
+  fs.writeFileSync(filePath, pdf);
   return { ok: true, filePath };
 });
