@@ -1,3 +1,15 @@
+process.on("uncaughtException", (err) => {
+  const fs = require("fs");
+  try {
+    fs.writeFileSync("main-crash.log", String(err && (err.stack || err)), "utf8");
+  } catch {}
+});
+process.on("unhandledRejection", (err) => {
+  const fs = require("fs");
+  try {
+    fs.writeFileSync("main-crash.log", String(err && (err.stack || err)), "utf8");
+  } catch {}
+});
 const { spawn } = require("child_process");
 let serverProc = null;
 const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
