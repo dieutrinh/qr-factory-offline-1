@@ -3,123 +3,88 @@
 
 const express = require("express");
 const path = require("path");
-const XLSX = require("xlsx");
-const { db, initDb, dbPath } = require("./src/src/db");
+const fs = require("fs");
+const Database = require("better-sqlite3");
 
-initDb();
+const PORT = Number(process.env.PORT || 3000);
+const HOST = "127.0.0.1";
 
 const app = express();
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "2mb" }));
 
-const WWW_DIR = path.join(__dirname, "www");
-app.use("/", express.static(WWW_DIR));
+// ===== DB location (portable-safe) =====
+// ưu tiên lưu vào folder app (cùng repo) nếu chạy dev,
+// còn khi chạy packaged thì dùng userData của electron (nếu có env APP_DB_DIR)
+const DB_DIR =
+  process.env.APP_DB_DIR ||
+  path.join(process.cwd(), "data");
 
-/* ===== Base ===== */
-app.get("/api/health", (_req, res) => res.json({ ok: true, dbPath }));
+fs.mkdirSync(DB_DIR, { recursive: true });
+const DB_PATH = path.join(DB_DIR, "qrfactory.sqlite");
 
-app.get("/api/base-url", (req, res) => {
-  const env = (process.env.BASE_URL || "").trim();
-  const origin = `${req.protocol}://${req.get("host")}`;
-  res.json({ ok: true, baseUrl: env || origin });
-});
+const db = new Database(DB_PATH);
+db.pragma("journal_mode = WAL");
 
-/* ===== CRUD ===== */
-app.post("/api/qr/upsert", (req, res) => {
-  const p = req.body || {};
-  const code = String(p.code || "").trim();
-  if (!code) return res.status(400).send("Missing code");
+db.exec(`
+CREATE TABLE IF NOT EXISTS products (
+  code TEXT PRIMARY KEY,
+  product_name TEXT,
+  batch_serial TEXT,
+  mfg_date TEXT,
+  exp_date TEXT,
+  note_extra TEXT,
+  status TEXT,
+  updated_at TEXT
+);
+`);
 
-  db.prepare(`
-    INSERT INTO products(code, product_name, batch_serial, mfg_date, exp_date, note_extra, status, updated_at)
-    VALUES(@code,@product_name,@batch_serial,@mfg_date,@exp_date,@note_extra,@status,datetime('now'))
-    ON CONFLICT(code) DO UPDATE SET
-      product_name=excluded.product_name,
-      batch_serial=excluded.batch_serial,
-      mfg_date=excluded.mfg_date,
-      exp_date=excluded.exp_date,
-      note_extra=excluded.note_extra,
-      status=excluded.status,
-      updated_at=datetime('now')
-  `).run({
+function nowISO() {
+  return new Date().toISOString();
+}
+
+function genCode() {
+  // QR + 8 ký tự
+  const s = Math.random().toString(36).slice(2, 10).toUpperCase();
+  return "QR" + s;
+}
+
+// Scan URL format (đúng yêu cầu: /qr.html?token=...)
+// Ở EXE offline, link scan thực tế vẫn chạy vì qr.html là file local (renderer open).
+// Nếu sau này bạn deploy web, chỉ cần đổi BASE_URL thành domain.
+function getBaseUrl() {
+  return process.env.BASE_URL || `http://${HOST}:${PORT}`;
+}
+function makeScanUrl(code) {
+  // ✅ format theo yêu cầu user: url/qr.html?token=...
+  // nếu BASE_URL là domain web => link web
+  // nếu BASE_URL là http local => vẫn OK để test
+  return `${getBaseUrl()}/qr.html?token=${encodeURIComponent(code)}`;
+}
+
+// ===== health =====
+app.get("/api/health", (_req, res) => res.json({ ok: true, db: DB_PATH }));
+
+// ===== create/update QR =====
+app.post("/api/qr", (req, res) => {
+  const b = req.body || {};
+
+  let code = String((b.code || "")).trim();
+  if (!code) code = genCode(); // ✅ FIX: không còn Missing code
+
+  const row = {
     code,
-    product_name: p.product_name || "",
-    batch_serial: p.batch_serial || "",
-    mfg_date: p.mfg_date || "",
-    exp_date: p.exp_date || "",
-    note_extra: p.note_extra || "",
-    status: p.status || "active"
-  });
-
-  res.json({ ok: true, code });
-});
-
-/* ===== SCAN ===== */
-app.get("/api/scan", (req, res) => {
-  const code = String(req.query.token || "").trim();
-  if (!code) return res.status(400).json({ ok: false, message: "Missing token" });
-
-  const row = db.prepare(`SELECT * FROM products WHERE code=?`).get(code);
-  if (!row) return res.status(404).json({ ok: false, message: "Not found" });
-
-  res.json({ ok: true, data: row });
-});
-
-app.get("/scan", (_req, res) => {
-  res.sendFile(path.join(WWW_DIR, "qr.html"));
-});
-
-/* ===== ✅ FULL PRODUCT LIST (KHÔNG PHỤ THUỘC HISTORY) ===== */
-app.get("/api/products", (req, res) => {
-  const q = String(req.query.q || "").trim().toLowerCase();
-  const rows = db
-    .prepare(`SELECT * FROM products ORDER BY updated_at DESC`)
-    .all();
-
-  const filtered = q
-    ? rows.filter(r =>
-        `${r.code} ${r.product_name} ${r.batch_serial}`
-          .toLowerCase()
-          .includes(q)
-      )
-    : rows;
-
-  res.json({ ok: true, rows: filtered });
-});
-
-/* ===== HISTORY ===== */
-app.get("/api/history", (_req, res) => {
-  const rows = db.prepare(`
-    SELECT * FROM scan_logs
-    ORDER BY id DESC
-    LIMIT 300
-  `).all();
-  res.json({ ok: true, rows });
-});
-
-/* ===== EXCEL ===== */
-app.get("/api/excel/export", (_req, res) => {
-  const rows = db.prepare(`SELECT * FROM products`).all();
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "products");
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-
-  res.setHeader("Content-Disposition", "attachment; filename=products.xlsx");
-  res.send(buf);
-});
-
-app.post("/api/excel/import", (req, res) => {
-  const { base64 } = req.body || {};
-  if (!base64) return res.status(400).send("Missing base64");
-
-  const buf = Buffer.from(base64, "base64");
-  const wb = XLSX.read(buf, { type: "buffer" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    product_name: b.product_name || b.product || "",
+    batch_serial: b.batch_serial || b.batch || "",
+    mfg_date: b.mfg_date || b.mfg || "",
+    exp_date: b.exp_date || b.exp || "",
+    note_extra: b.note_extra || b.note || "",
+    status: b.status || "active",
+    updated_at: nowISO(),
+  };
 
   const stmt = db.prepare(`
     INSERT INTO products(code, product_name, batch_serial, mfg_date, exp_date, note_extra, status, updated_at)
-    VALUES(@code,@product_name,@batch_serial,@mfg_date,@exp_date,@note_extra,@status,datetime('now'))
+    VALUES(@code,@product_name,@batch_serial,@mfg_date,@exp_date,@note_extra,@status,@updated_at)
     ON CONFLICT(code) DO UPDATE SET
       product_name=excluded.product_name,
       batch_serial=excluded.batch_serial,
@@ -127,21 +92,47 @@ app.post("/api/excel/import", (req, res) => {
       exp_date=excluded.exp_date,
       note_extra=excluded.note_extra,
       status=excluded.status,
-      updated_at=datetime('now')
+      updated_at=excluded.updated_at
   `);
+  stmt.run(row);
 
-  const tx = db.transaction(items => {
-    for (const r of items) {
-      if (!r.code) continue;
-      stmt.run(r);
-    }
+  return res.json({
+    ok: true,
+    code,
+    scanUrl: makeScanUrl(code), // ✅ đúng format qr.html?token=
   });
-  tx(rows);
-
-  res.json({ ok: true, imported: rows.length });
 });
 
-const PORT = Number(process.env.PORT || 3000);
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("Server running at", PORT);
+// ===== scan =====
+app.get("/api/scan", (req, res) => {
+  const token = String(req.query.token || "").trim();
+  if (!token) return res.status(400).json({ ok: false, error: "missing token" });
+
+  const r = db.prepare(`SELECT * FROM products WHERE code=?`).get(token);
+  if (!r) return res.status(404).json({ ok: false, error: "not found" });
+
+  return res.json({ ok: true, data: r });
+});
+
+// ===== admin list products (FULL) =====
+app.get("/api/products", (req, res) => {
+  const q = String(req.query.q || "").trim();
+  let rows;
+  if (!q) {
+    rows = db.prepare(`SELECT * FROM products ORDER BY updated_at DESC`).all();
+  } else {
+    rows = db.prepare(`
+      SELECT * FROM products
+      WHERE code LIKE ? OR product_name LIKE ? OR batch_serial LIKE ?
+      ORDER BY updated_at DESC
+    `).all(`%${q}%`, `%${q}%`, `%${q}%`);
+  }
+  return res.json({ ok: true, rows });
+});
+
+// ===== static serve www (để BASE_URL http://127.0.0.1:PORT cũng mở được qr/admin/index) =====
+app.use(express.static(path.join(__dirname, "www")));
+
+app.listen(PORT, HOST, () => {
+  console.log(`[server] listening http://${HOST}:${PORT} | db=${DB_PATH}`);
 });
