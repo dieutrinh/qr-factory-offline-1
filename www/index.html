@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>QR Factory Offline</title>
+  <style>
+    body {
+      font-family: system-ui, Arial;
+      background: #f5f6fa;
+      margin: 0;
+      padding: 40px;
+    }
+    .card {
+      background: white;
+      padding: 24px;
+      max-width: 420px;
+      margin: auto;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.1);
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    button {
+      margin-top: 12px;
+      padding: 10px;
+      width: 100%;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    img {
+      margin-top: 16px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>✅ QR Factory Offline</h2>
+    <p>Tạo QR không cần Internet</p>
+
+    <input id="text" placeholder="Nhập nội dung QR..." />
+    <button onclick="gen()">Tạo QR</button>
+
+    <img id="qr" />
+  </div>
+
+  <script>
+    async function gen() {
+      const text = document.getElementById('text').value;
+      const img = document.getElementById('qr');
+      const dataUrl = await window.qrFactory.generateQrDataUrl(text);
+      img.src = dataUrl;
+    }
+  </script>
+</body>
+</html>
