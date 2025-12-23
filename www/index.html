@@ -1,196 +1,37 @@
-<!doctype html>
-<html lang="vi">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>QR Factory V2 — Generate</title>
-  <style>
-    :root{--bg:#071022;--panel:#0b1a33;--panel2:#0a1630;--txt:#d7e2ff;--muted:#92a6d6;--line:#1e3566;--btn:#2f6bff;--btn2:#203a70;--warn:#ffcc66;--ok:#8fffb7;--err:#ff8f8f;}
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,Segoe UI,Arial}
-    .wrap{padding:18px}.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:start}
-    .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:16px}
-    h1{font-size:20px;margin:0 0 10px}.sub{color:var(--muted);margin:0 0 10px} a{color:#b7ccff}
-    label{display:block;color:var(--muted);margin:10px 0 6px}
-    input,textarea,select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:#060f22;color:var(--txt);outline:none}
-    textarea{min-height:76px;resize:vertical}
-    .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .row2b{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end}
-    .btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    button{border:1px solid var(--line);border-radius:12px;padding:10px 14px;color:var(--txt);background:var(--btn2);cursor:pointer;font-weight:600}
-    button.primary{background:var(--btn);border-color:#2f6bff} button.warn{outline:2px solid var(--warn);outline-offset:1px}
-    .pill{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#081636;color:var(--muted)}
-    .qrBox{width:220px;height:220px;border-radius:16px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;background:#06102a;overflow:hidden}
-    .qrBox img{width:100%;height:100%;object-fit:contain}
-    .msg{margin-top:10px;font-size:13px}.msg.ok{color:var(--ok)}.msg.err{color:var(--err)}
-  </style>
-</head>
-<body>
-<div class="wrap">
-  <div class="grid">
-    <div class="card">
-      <h1>🎨 QR Factory V2 — Generate (DB thật + Online link)</h1>
-      <p class="sub">
-        • QR in sẵn chứa link: <b>https://.../scan?token=...</b><br/>
-        • <a href="./admin.html">Mở Admin dashboard</a>
-      </p>
-
-      <label>Product Name</label><input id="productName" />
-      <label>Batch/Serial</label><input id="batchSerial" />
-
-      <div class="row2">
-        <div><label>MFG Date (dd-mm-yyyy)</label><input id="mfgDate" placeholder="23-12-2025" /></div>
-        <div><label>EXP Date (dd-mm-yyyy)</label><input id="expDate" placeholder="25-12-2026" /></div>
-      </div>
-
-      <label>Note/Extra</label><textarea id="noteExtra"></textarea>
-
-      <div class="row2b">
-        <div><label>Status</label>
-          <select id="status"><option value="active" selected>active</option><option value="inactive">inactive</option></select>
-        </div>
-        <div><label>(Tuỳ chọn) Code</label><input id="codeOpt" placeholder="Để trống = tự sinh" /></div>
-      </div>
-
-      <div class="btnrow">
-        <button class="primary" type="button" id="btnCreate">Tạo QR (lưu DB)</button>
-        <button type="button" id="btnOpen">Mở link scan</button>
-        <button type="button" id="btnPng">Tải PNG</button>
-        <button class="warn" type="button" id="btnPdf">Tải PDF</button>
-      </div>
-
-      <div id="msg" class="msg"></div>
-    </div>
-
-    <div class="card">
-      <h1>🧾 Kết quả</h1>
-      <div class="pill">Code: <span id="codeOut">-</span></div><br/><br/>
-      <div class="pill">URL: <span id="urlOut">-</span></div><br/><br/>
-      <div class="qrBox"><img id="qrImg" /></div>
-    </div>
-  </div>
-</div>
-
-<script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const msg = $("msg");
-  const codeOut = $("codeOut");
-  const urlOut = $("urlOut");
-  const qrImg = $("qrImg");
-
-  let baseUrl = "";      // https://domain hoặc http://127.0.0.1:3000
-  let lastCode = "";
-  let lastUrl = "";
-  let lastQrDataUrl = "";
-
-  function setMsg(t, kind=""){ msg.className = "msg " + (kind||""); msg.textContent = t||""; }
-
-  function randCode(){ return "QR" + Math.random().toString(36).slice(2,10).toUpperCase(); }
-
-  function parseDMY(s){
-    const m=/^(\d{2})-(\d{2})-(\d{4})$/.exec((s||"").trim()); if(!m) return null;
-    const dd=+m[1],mm=+m[2],yy=+m[3]; if(mm<1||mm>12) return null;
-    const max=new Date(yy,mm,0).getDate(); if(dd<1||dd>max) return null;
-    return `${yy}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
-  }
-
-  async function apiGet(path){
-    if (window.qrFactory?.apiGet) return await window.qrFactory.apiGet(path);
-    const r = await fetch(path); if(!r.ok) throw new Error(await r.text()); return await r.json();
-  }
-  async function apiPost(path, body){
-    if (window.qrFactory?.apiPost) return await window.qrFactory.apiPost(path, body);
-    const r = await fetch(path,{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!r.ok) throw new Error(await r.text()); return await r.json();
-  }
-
-  async function loadBaseUrl(){
-    const r = await apiGet("/api/base-url");
-    baseUrl = r.baseUrl;
-  }
-
-  function buildScanUrl(code){
-    return `${baseUrl.replace(/\/+$/,"")}/scan?token=${encodeURIComponent(code)}`;
-  }
-
-  async function createQr(){
-    setMsg("");
-    const product = $("productName").value.trim();
-    const batch = $("batchSerial").value.trim();
-    const mfgISO = parseDMY($("mfgDate").value);
-    const expISO = parseDMY($("expDate").value);
-    const note = $("noteExtra").value.trim();
-    const status = $("status").value;
-    const code = ($("codeOpt").value.trim() || randCode());
-
-    if(!product) return setMsg("Thiếu Product Name","err");
-    if(!batch) return setMsg("Thiếu Batch/Serial","err");
-    if(!mfgISO) return setMsg("MFG sai dd-mm-yyyy","err");
-    if(!expISO) return setMsg("EXP sai dd-mm-yyyy","err");
-
-    const url = buildScanUrl(code);
-
-    await apiPost("/api/qr/upsert", {
-      code,
-      product_name: product,
-      batch_serial: batch,
-      mfg_date: mfgISO,
-      exp_date: expISO,
-      note_extra: note,
-      status
-    });
-
-    lastCode = code;
-    lastUrl = url;
-    codeOut.textContent = code;
-    urlOut.textContent = url;
-
-    if(!window.qrFactory?.toDataUrl) return setMsg("Thiếu qrFactory.toDataUrl","err");
-    lastQrDataUrl = await window.qrFactory.toDataUrl(url);
-    qrImg.src = lastQrDataUrl;
-
-    setMsg("Tạo QR + lưu DB OK ✅","ok");
-  }
-
-  async function openLink(){
-    if(!lastUrl) return setMsg("Chưa có URL","err");
-    if(window.qrFactory?.openExternal) await window.qrFactory.openExternal(lastUrl);
-    else window.open(lastUrl,"_blank");
-  }
-
-  async function dlPng(){
-    if(!lastQrDataUrl) return setMsg("Chưa có QR","err");
-    if(window.qrFactory?.savePng){
-      const r = await window.qrFactory.savePng({ filename: `${lastCode||"qr"}.png`, dataUrl: lastQrDataUrl });
-      if(r?.canceled) return setMsg("Đã huỷ",""); if(r?.ok===false) return setMsg(r.error,"err");
-      return setMsg("PNG OK ✅","ok");
-    }
-    const a=document.createElement("a"); a.href=lastQrDataUrl; a.download=`${lastCode||"qr"}.png`; a.click();
-  }
-
-  async function dlPdf(){
-    if(window.qrFactory?.savePdf){
-      const r = await window.qrFactory.savePdf({ filename: `${lastCode||"qr"}.pdf` });
-      if(r?.canceled) return setMsg("Đã huỷ",""); if(r?.ok===false) return setMsg(r.error,"err");
-      return setMsg("PDF OK ✅","ok");
-    }
-    window.print();
-  }
-
-  document.addEventListener("DOMContentLoaded", async () => {
+async function apiGet(path){
+  for (let i=0;i<6;i++){
     try{
-      await loadBaseUrl();
-      setMsg("Ready ✅ BASE_URL=" + baseUrl, "ok");
+      if (window.qrFactory?.apiGet) return await window.qrFactory.apiGet(path);
+      const r = await fetch(path);
+      if(!r.ok) throw new Error(await r.text());
+      return await r.json();
     }catch(e){
-      setMsg("Không gọi được server. Hãy chạy server.js (online) hoặc chạy bằng EXE (offline).","err");
+      const msg = String(e?.message||e);
+      if (msg.includes("ECONNREFUSED") || msg.includes("Failed to fetch")) {
+        await new Promise(r=>setTimeout(r, 400));
+        continue;
+      }
+      throw e;
     }
+  }
+  throw new Error("Server chưa chạy (ECONNREFUSED 127.0.0.1:3000). Hãy chạy bằng EXE hoặc bật server.js.");
+}
 
-    $("btnCreate").onclick = () => createQr().catch(e => setMsg(String(e.message||e),"err"));
-    $("btnOpen").onclick = () => openLink().catch(e => setMsg(String(e.message||e),"err"));
-    $("btnPng").onclick = () => dlPng().catch(e => setMsg(String(e.message||e),"err"));
-    $("btnPdf").onclick = () => dlPdf().catch(e => setMsg(String(e.message||e),"err"));
-  });
-})();
-</script>
-</body>
-</html>
+async function apiPost(path, body){
+  for (let i=0;i<6;i++){
+    try{
+      if (window.qrFactory?.apiPost) return await window.qrFactory.apiPost(path, body);
+      const r = await fetch(path,{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(!r.ok) throw new Error(await r.text());
+      return await r.json();
+    }catch(e){
+      const msg = String(e?.message||e);
+      if (msg.includes("ECONNREFUSED") || msg.includes("Failed to fetch")) {
+        await new Promise(r=>setTimeout(r, 400));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error("Server chưa chạy (ECONNREFUSED 127.0.0.1:3000).");
+}
