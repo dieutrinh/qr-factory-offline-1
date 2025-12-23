@@ -1,40 +1,51 @@
-const { app, BrowserWindow } = require('electron');
-const path = require('path');
-const fs = require('fs');
+const { app, BrowserWindow } = require("electron");
+const path = require("path");
+const fs = require("fs");
 
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+
+    // ✅ chống “flash trắng”
+    show: false,
+    backgroundColor: "#FFFFFF",
+
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
+      sandbox: false,
     },
   });
 
-  const indexPath = path.join(__dirname, 'www', 'index.html');
-  preload: path.join(__dirname,'preload.js')
+  const indexPath = path.join(__dirname, "www", "index.html");
+
+  // ✅ nếu load xong mới show => hết chớp
+  win.once("ready-to-show", () => win.show());
+
+  // ✅ log nếu load fail
+  win.webContents.on("did-fail-load", (e, code, desc, url) => {
+    console.log("did-fail-load:", code, desc, url);
+  });
 
   if (fs.existsSync(indexPath)) {
     win.loadFile(indexPath);
   } else {
-    // Nếu thiếu file => hiển thị lỗi ngay trên màn hình (không còn trắng)
     win.loadURL(
-      'data:text/html;charset=utf-8,' +
+      "data:text/html;charset=utf-8," +
         encodeURIComponent(`
           <h2>❌ Không tìm thấy UI offline</h2>
-          <p><b>Thiếu file:</b> ${indexPath}</p>
-          <p>Nguyên nhân: electron-builder chưa đóng gói thư mục <b>www/</b> vào EXE.</p>
+          <p>Thiếu file: <b>${indexPath}</b></p>
         `)
     );
   }
 
-  // Mở DevTools để thấy lỗi JS/CSS nếu có
-  win.webContents.openDevTools({ mode: 'detach' });
+  // ❌ TẮT auto mở devtools để khỏi “chớp” + rối màn hình
+  // win.webContents.openDevTools({ mode: "detach" });
 }
 
 app.whenReady().then(createWindow);
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
 });
