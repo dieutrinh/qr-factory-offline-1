@@ -1,4 +1,4 @@
-name: Build V2 Online (ZIP)
+name: Build ZIP
 
 on:
   workflow_dispatch:
@@ -32,10 +32,7 @@ jobs:
       - name: Make release folder
         run: |
           mkdir -p release
-          cp -R public src server.js package.json release/
-          echo "PORT=3000" > release/.env.example
-          echo "BASE_URL=http://localhost:3000" >> release/.env.example
-          echo "ADMIN_TOKEN=change-me" >> release/.env.example
+          cp -R src server.js package.json release/
 
       - name: Zip
         run: |
@@ -47,4 +44,3 @@ jobs:
         with:
           name: qr-factory-v2-online
           path: qr-factory-v2-online.zip
-          retention-days: 14
