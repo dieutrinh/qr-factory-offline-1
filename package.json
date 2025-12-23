@@ -15,18 +15,20 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
+    "appId": "com.company.qrfactory.offline",
+    "productName": "QR Factory Offline",
     "asar": true,
     "files": [
-  "main.js",
-  "preload.js",
-  "package.json",
-  "www/**",
-  "node_modules/**"
-]
-
+      "main.js",
+      "preload.js",
+      "www/**",
+      "node_modules/**",
+      "package.json"
     ],
     "win": {
-      "target": ["portable"]
+      "target": [
+        "portable"
+      ]
     }
   }
 }
