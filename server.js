@@ -1,207 +1,108 @@
-import "dotenv/config";
-import express from "express";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import multer from "multer";
-import { nanoid } from "nanoid";
-import QRCode from "qrcode";
-import { PDFDocument, StandardFonts } from "pdf-lib";
-import XLSX from "xlsx";
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const XLSX = require("xlsx");
+const { db, initDb } = require("./src/src/db");
 
-// repo bạn đang có src/src/db.js
-import {
-  initDb,
-  upsertMany,
-  upsertOne,
-  getByCode,
-  listAll,
-  exportToXlsxBuffer,
-  getStats,
-} from "./src/src/db.js";
+const app = express();
+app.use(express.json({ limit: "5mb" }));
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+initDb();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// health
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-function pickPublicDir() {
-  const candidates = [
-    path.join(__dirname, "public", "public"), // public/public/index.html
-    path.join(__dirname, "public"),           // public/index.html
-    path.join(__dirname, "www")               // www/index.html
-  ];
-  for (const dir of candidates) {
-    const f = path.join(dir, "index.html");
-    if (fs.existsSync(f)) return dir;
-  }
-  // fallback: ưu tiên public/public
-  return path.join(__dirname, "public", "public");
-}
+// create/update by code(token)
+app.post("/api/qr/upsert", (req, res) => {
+  const p = req.body || {};
+  if (!p.code) return res.status(400).send("Missing code");
 
-export function createApp() {
-  initDb();
-
-  const app = express();
-  const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
-
-  app.use(express.json({ limit: "2mb" }));
-
-  const PUBLIC_DIR = pickPublicDir();
-  app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
-
-  function requireAdmin(req, res, next) {
-    if (!ADMIN_TOKEN) return next();
-    const token = req.headers["x-admin-token"] || req.query.token;
-    if (token !== ADMIN_TOKEN) return res.status(401).json({ ok: false, error: "Unauthorized" });
-    next();
-  }
-
-  function normalizeRow(row) {
-    const code = String(row.code || "").trim();
-    if (!code) return null;
-
-    const productName = String(row.productName ?? "").trim();
-    const batch = String(row.batch ?? "").trim();
-    const mfgDate = String(row.mfgDate ?? "").trim();
-    const expDate = String(row.expDate ?? "").trim();
-    const note = String(row.note ?? "").trim();
-    const statusRaw = String(row.status ?? "active").trim().toLowerCase();
-    const status = ["active", "inactive", "revoked"].includes(statusRaw) ? statusRaw : "active";
-
-    return { code, productName, batch, mfgDate, expDate, note, status };
-  }
-
-  app.get("/api/health", (req, res) => {
-    res.json({ ok: true, stats: getStats(), publicDir: path.basename(PUBLIC_DIR) });
+  db.prepare(`
+    INSERT INTO products(code, product_name, batch_serial, mfg_date, exp_date, note_extra, status, updated_at)
+    VALUES(@code, @product_name, @batch_serial, @mfg_date, @exp_date, @note_extra, @status, datetime('now'))
+    ON CONFLICT(code) DO UPDATE SET
+      product_name=excluded.product_name,
+      batch_serial=excluded.batch_serial,
+      mfg_date=excluded.mfg_date,
+      exp_date=excluded.exp_date,
+      note_extra=excluded.note_extra,
+      status=excluded.status,
+      updated_at=datetime('now')
+  `).run({
+    code: p.code,
+    product_name: p.product_name || "",
+    batch_serial: p.batch_serial || "",
+    mfg_date: p.mfg_date || "",
+    exp_date: p.exp_date || "",
+    note_extra: p.note_extra || "",
+    status: p.status || "active",
   });
 
-  app.post("/api/admin/create", requireAdmin, (req, res) => {
-    const body = req.body || {};
-    const code = (body.code && String(body.code).trim()) || nanoid(10);
+  db.prepare(`
+    INSERT INTO scan_logs(code, action, created_at)
+    VALUES(?, 'created', datetime('now'))
+  `).run(p.code);
 
-    const row = normalizeRow({
-      code,
-      productName: body.productName,
-      batch: body.batch,
-      mfgDate: body.mfgDate,
-      expDate: body.expDate,
-      note: body.note,
-      status: body.status ?? "active",
-    });
-    if (!row) return res.status(400).json({ ok: false, error: "Missing code" });
+  res.json({ ok: true, code: p.code });
+});
 
-    upsertOne(row);
-    res.json({ ok: true, code: row.code, url: `/q/${encodeURIComponent(row.code)}` });
-  });
+// scan by token
+app.get("/api/scan", (req, res) => {
+  const code = String(req.query.token || "").trim();
+  if (!code) return res.status(400).send("Missing token");
 
-  app.get("/api/qr/:code", (req, res) => {
-    const code = String(req.params.code || "").trim();
-    const row = getByCode(code);
-    if (!row) return res.status(404).json({ ok: false, error: "Not found" });
-    res.json({ ok: true, data: row, url: `/q/${encodeURIComponent(code)}` });
-  });
+  const row = db.prepare(`SELECT * FROM products WHERE code=?`).get(code);
+  db.prepare(`INSERT INTO scan_logs(code, action, created_at) VALUES(?, 'scan', datetime('now'))`).run(code);
 
-  app.get("/api/admin/list", requireAdmin, (req, res) => {
-    res.json({ ok: true, items: listAll() });
-  });
+  if (!row) return res.status(404).json({ ok: false, message: "Not found", code });
+  res.json({ ok: true, data: row });
+});
 
-  app.post("/api/admin/upload-excel", requireAdmin, upload.single("file"), (req, res) => {
-    if (!req.file?.buffer) return res.status(400).json({ ok: false, error: "No file" });
+// history
+app.get("/api/history", (_req, res) => {
+  const rows = db.prepare(`
+    SELECT id, code, action, created_at
+    FROM scan_logs
+    ORDER BY id DESC
+    LIMIT 200
+  `).all();
+  res.json({ ok: true, rows });
+});
 
-    const wb = XLSX.read(req.file.buffer, { type: "buffer" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+// export Excel
+app.get("/api/excel/export", (_req, res) => {
+  const rows = db.prepare(`SELECT * FROM products ORDER BY updated_at DESC`).all();
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "products");
 
-    const normalized = [];
-    for (const r of rows) {
-      const row = normalizeRow(r);
-      if (row) normalized.push(row);
-    }
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", "attachment; filename=products.xlsx");
+  res.send(buf);
+});
 
-    const result = upsertMany(normalized);
-    res.json({ ok: true, received: rows.length, upserted: result.upserted });
-  });
+// import Excel (POST raw base64)
+app.post("/api/excel/import", (req, res) => {
+  const { base64 } = req.body || {};
+  if (!base64) return res.status(400).send("Missing base64");
 
-  app.get("/api/admin/export-excel", requireAdmin, (req, res) => {
-    const buf = exportToXlsxBuffer();
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="qr-data-export.xlsx"`);
-    res.send(buf);
-  });
+  const buffer = Buffer.from(base64, "base64");
+  const wb = XLSX.read(buffer, { type: "buffer" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
-  app.get("/api/admin/export", requireAdmin, async (req, res) => {
-    const code = String(req.query.code || "").trim();
-    const format = String(req.query.format || "png").toLowerCase();
+  const stmt = db.prepare(`
+    INSERT INTO products(code, product_name, batch_serial, mfg_date, exp_date, note_extra, status, updated_at)
+    VALUES(@code, @product_name, @batch_serial, @mfg_date, @exp_date, @note_extra, @status, datetime('now'))
+    ON CONFLICT(code) DO UPDATE SET
+      product_name=excluded.product_name,
+      batch_serial=excluded.batch_serial,
+      mfg_date=excluded.mfg_date,
+      exp_date=excluded.exp_date,
+      note_extra=excluded.note_extra,
+      status=excluded.status,
+      updated_at=datetime('now')
+  `);
 
-    const row = getByCode(code);
-    if (!row) return res.status(404).json({ ok: false, error: "Not found" });
-
-    const url = `${req.protocol}://${req.get("host")}/q/${encodeURIComponent(code)}`;
-
-    const pngDataUrl = await QRCode.toDataURL(url, { margin: 2, scale: 10 });
-    const pngBase64 = pngDataUrl.split(",")[1];
-    const pngBytes = Buffer.from(pngBase64, "base64");
-
-    if (format === "png") {
-      res.setHeader("Content-Type", "image/png");
-      res.setHeader("Content-Disposition", `attachment; filename="qr-${code}.png"`);
-      return res.send(pngBytes);
-    }
-
-    if (format === "pdf") {
-      const pdf = await PDFDocument.create();
-      const page = pdf.addPage([595.28, 841.89]);
-      const font = await pdf.embedFont(StandardFonts.Helvetica);
-
-      const img = await pdf.embedPng(pngBytes);
-      page.drawImage(img, { x: 40, y: 540, width: 260, height: 260 });
-
-      const lines = [
-        `Code: ${row.code}`,
-        `Product Name: ${row.productName}`,
-        `Batch/Serial: ${row.batch}`,
-        `MFG Date: ${row.mfgDate}`,
-        `EXP Date: ${row.expDate}`,
-        `Note/Extra: ${row.note}`,
-        `Status: ${row.status}`,
-        `URL: ${url}`
-      ];
-
-      let ty = 520;
-      for (const l of lines) {
-        page.drawText(l, { x: 40, y: ty, size: 11, font });
-        ty -= 16;
-      }
-
-      const pdfBytes = await pdf.save();
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="qr-${code}.pdf"`);
-      return res.send(Buffer.from(pdfBytes));
-    }
-
-    return res.status(400).json({ ok: false, error: "format must be png|pdf" });
-  });
-
-  // pages
-  app.get("/q/:code", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "qr.html")));
-  app.get("/admin", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "admin.html")));
-  app.get("/", (req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html")));
-
-  return app;
-}
-
-export async function startServer(port = Number(process.env.PORT || 3000)) {
-  const app = createApp();
-  return new Promise((resolve) => {
-    const server = app.listen(port, "127.0.0.1", () => {
-      resolve({ server, port: server.address().port });
-    });
-  });
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const { port } = await startServer(Number(process.env.PORT || 3000));
-  console.log(`✅ V2 Online running at http://127.0.0.1:${port}`);
-}
-
+  const tx = db.transaction((items) => {
