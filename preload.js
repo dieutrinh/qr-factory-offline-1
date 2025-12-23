@@ -1,15 +1,15 @@
-const { contextBridge } = require("electron");
-const QRCode = require("qrcode");
+const { contextBridge } = require('electron');
 
-contextBridge.exposeInMainWorld("qr", {
-  generateDataURL: async (text, opts = {}) => {
-    const width = Number(opts.width || 512);
-    const margin = Number(opts.margin ?? 2);
-    return await QRCode.toDataURL(String(text), {
-      errorCorrectionLevel: "M",
-      width,
-      margin,
-      type: "image/png",
-    });
-  },
+let QRCode;
+try {
+  QRCode = require('qrcode');
+} catch (e) {
+  QRCode = null;
+}
+
+contextBridge.exposeInMainWorld('qrFactory', {
+  generateQrDataUrl: async (text, opts = {}) => {
+    if (!QRCode) throw new Error("Missing dependency 'qrcode'. Check package.json dependencies.");
+    return await QRCode.toDataURL(text, { width: 320, margin: 1, ...opts });
+  }
 });
