@@ -1,12 +1,8 @@
-const { contextBridge } = require('electron');
-const QRCode = require('qrcode');
+const { contextBridge } = require("electron");
+const QRCode = require("qrcode");
 
-contextBridge.exposeInMainWorld('qrFactory', {
+contextBridge.exposeInMainWorld("qrFactory", {
   toDataUrl: async (text, opts = {}) => {
-    return QRCode.toDataURL(String(text), {
-      width: 320,
-      margin: 1,
-      ...opts
-    });
+    return await QRCode.toDataURL(String(text), { width: 320, margin: 1, ...opts });
   }
 });
