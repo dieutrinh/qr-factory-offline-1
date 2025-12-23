@@ -28,6 +28,11 @@
     "appId": "com.qrfactory.v2online",
     "productName": "QR Factory V2 Online",
     "asar": true,
+
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+
     "files": [
       "server.js",
       "src/**",
@@ -35,6 +40,7 @@
       "electron/**",
       "package.json"
     ],
+
     "win": {
       "target": ["portable"]
     }
