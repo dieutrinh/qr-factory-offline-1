@@ -1,43 +1,13 @@
 {
-  "name": "qr-factory-offline-1",
+  "name": "qr-factory-v2",
   "version": "2.0.0",
-  "private": true,
-  "main": "electron/main.cjs",
+  "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "server": "node server.js",
-    "dist:win": "electron-builder --win portable",
-    "dist": "electron-builder"
-  },
-  "dependencies": {
-    "better-sqlite3": "^11.0.0",
-    "express": "^4.19.2",
-    "qrcode": "^1.5.4",
-    "xlsx": "^0.18.5"
+    "dist": "electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "31.0.0",
     "electron-builder": "24.13.3"
-  },
-  "build": {
-    "asar": false,
-    "appId": "com.qrfactory.v2",
-    "productName": "QR Factory V2",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "electron/**/*",
-      "www/**/*",
-      "preload.js",
-      "server.js",
-      "src/src/**/*",
-      "package.json"
-    ],
-    "win": {
-      "target": [
-        "portable"
-      ]
-    }
   }
 }
