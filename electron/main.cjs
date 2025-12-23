@@ -13,7 +13,7 @@ let serverProc = null;
 const API_HOST = "127.0.0.1";
 let API_PORT = null;
 
-/* ===== Single instance: không mở nhiều exe ===== */
+/* ===== Single instance ===== */
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 app.on("second-instance", () => {
@@ -23,7 +23,7 @@ app.on("second-instance", () => {
   }
 });
 
-/* ===== Get free port (port động) ===== */
+/* ===== Free port ===== */
 function getFreePort() {
   return new Promise((resolve, reject) => {
     const s = net.createServer();
@@ -36,8 +36,8 @@ function getFreePort() {
   });
 }
 
-/* ===== HTTP ping /api/health để đảm bảo server lên ===== */
-function pingHealth(host, port, timeoutMs = 20000) {
+/* ===== Ping /api/health ===== */
+function pingHealth(host, port, timeoutMs = 25000) {
   const started = Date.now();
   return new Promise((resolve) => {
     const tick = () => {
@@ -50,9 +50,7 @@ function pingHealth(host, port, timeoutMs = 20000) {
           setTimeout(tick, 300);
         }
       );
-      req.on("timeout", () => {
-        req.destroy();
-      });
+      req.on("timeout", () => req.destroy());
       req.on("error", () => {
         if (Date.now() - started > timeoutMs) return resolve(false);
         setTimeout(tick, 300);
@@ -63,7 +61,31 @@ function pingHealth(host, port, timeoutMs = 20000) {
   });
 }
 
-/* ===== HTTP request helper (main proxy) ===== */
+/* ===== Start server (IMPORTANT: ELECTRON_RUN_AS_NODE) ===== */
+function startServer() {
+  const serverPath = path.join(__dirname, "..", "server.js");
+  if (!fs.existsSync(serverPath)) {
+    throw new Error(`Không thấy server.js tại: ${serverPath}`);
+  }
+
+  serverProc = spawn(process.execPath, [serverPath], {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      PORT: String(API_PORT),
+
+      // ✅ THIS FIXES PACKAGED EXE:
+      // chạy app.exe như Node để execute server.js
+      ELECTRON_RUN_AS_NODE: "1"
+    }
+  });
+
+  serverProc.on("exit", (code) => {
+    try { win?.webContents?.send("server-exit", { code }); } catch {}
+  });
+}
+
+/* ===== Proxy requests ===== */
 function httpRequest({ method, path: apiPath, body }) {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : "";
@@ -85,11 +107,7 @@ function httpRequest({ method, path: apiPath, body }) {
           if (res.statusCode < 200 || res.statusCode >= 300) {
             return reject(new Error(`API ${res.statusCode}: ${data}`));
           }
-          try {
-            resolve(JSON.parse(data));
-          } catch {
-            resolve(data);
-          }
+          try { resolve(JSON.parse(data)); } catch { resolve(data); }
         });
       }
     );
@@ -99,27 +117,7 @@ function httpRequest({ method, path: apiPath, body }) {
   });
 }
 
-/* ===== Start server.js (tự start, port động) ===== */
-function startServer() {
-  const serverPath = path.join(__dirname, "..", "server.js");
-  if (!fs.existsSync(serverPath)) {
-    throw new Error(`Không thấy server.js tại: ${serverPath}`);
-  }
-
-  serverProc = spawn(process.execPath, [serverPath], {
-    stdio: "inherit",
-    env: { ...process.env, PORT: String(API_PORT) }
-  });
-
-  serverProc.on("exit", (code) => {
-    // nếu server chết, báo UI (và tránh user bấm nút rồi ECONNREFUSED)
-    try {
-      win?.webContents?.send("server-exit", { code });
-    } catch {}
-  });
-}
-
-/* ===== Create window + chặn mở tab/window ===== */
+/* ===== Window ===== */
 function createWindow() {
   win = new BrowserWindow({
     width: 1200,
@@ -134,7 +132,7 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, "..", "www", "index.html"));
 
-  // chặn target=_blank / window.open tạo tab trong Electron
+  // chặn mở “tab/window” trong app
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
@@ -159,20 +157,15 @@ app.whenReady().then(async () => {
         message:
           "Không khởi động được server nội bộ.\n\n" +
           "Nguyên nhân thường gặp: lỗi better-sqlite3, thiếu module, hoặc server.js crash.\n\n" +
-          "Bạn mở CMD tại thư mục project và chạy: npm run server để xem log lỗi."
+          "Nếu cần debug: mở CMD tại thư mục project và chạy: npm run server"
       });
       app.quit();
       return;
     }
 
     createWindow();
-    // báo UI: server ready + port thực tế
     win.webContents.on("did-finish-load", () => {
-      win.webContents.send("server-ready", {
-        ok: true,
-        host: API_HOST,
-        port: API_PORT
-      });
+      win.webContents.send("server-ready", { ok: true, host: API_HOST, port: API_PORT });
     });
   } catch (e) {
     await dialog.showMessageBox({
@@ -196,10 +189,20 @@ ipcMain.handle("open-external", async (_e, url) => {
   return { ok: true };
 });
 
+// ✅ Backward compatible: accept (string) or ({path})
+ipcMain.handle("api-get", async (_e, arg) => {
+  const apiPath = typeof arg === "string" ? arg : (arg?.path || "");
+  return await httpRequest({ method: "GET", path: apiPath });
+});
+
+// ✅ Backward compatible: accept ({path,body}) or (path, body)
+ipcMain.handle("api-post", async (_e, arg) => {
+  if (typeof arg === "string") return await httpRequest({ method: "POST", path: arg, body: {} });
+  return await httpRequest({ method: "POST", path: arg?.path || "", body: arg?.body || {} });
+});
+
 ipcMain.handle("save-png", async (_e, { filename = "qr.png", dataUrl }) => {
-  if (!dataUrl || !String(dataUrl).startsWith("data:image")) {
-    return { ok: false, error: "PNG dataUrl invalid" };
-  }
+  if (!dataUrl || !String(dataUrl).startsWith("data:image")) return { ok: false, error: "PNG dataUrl invalid" };
   const { canceled, filePath } = await dialog.showSaveDialog({
     title: "Save PNG",
     defaultPath: filename,
@@ -221,12 +224,4 @@ ipcMain.handle("save-pdf", async (event, { filename = "qr.pdf" }) => {
   const pdf = await event.sender.printToPDF({ printBackground: true, pageSize: "A4" });
   await fs.promises.writeFile(filePath, pdf);
   return { ok: true, filePath };
-});
-
-// Proxy API: renderer gọi qua IPC => main tự dùng port động
-ipcMain.handle("api-get", async (_e, { path: apiPath }) => {
-  return await httpRequest({ method: "GET", path: apiPath });
-});
-ipcMain.handle("api-post", async (_e, { path: apiPath, body }) => {
-  return await httpRequest({ method: "POST", path: apiPath, body });
 });
