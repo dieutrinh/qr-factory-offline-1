@@ -38,7 +38,9 @@
     "win": {
       "target": [
         "portable"
-      ]
+      ]      
     }
+    "asar": false
   }
 }
+
