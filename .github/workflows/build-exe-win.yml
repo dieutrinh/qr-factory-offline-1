@@ -17,7 +17,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          # BỎ cache: npm vì repo chưa có package-lock.json
 
       - name: Configure npm retry/timeout
         run: |
@@ -30,7 +30,7 @@ jobs:
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
           ELECTRON_CUSTOM_DIR: ""
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
 
       - name: Build portable EXE
         run: npm run dist:win
