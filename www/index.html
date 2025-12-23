@@ -1,14 +1,106 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>QR Factory V2 — Generate</title>
+  <style>
+    :root{--bg:#071022;--panel:#0b1a33;--panel2:#0a1630;--txt:#d7e2ff;--muted:#92a6d6;--line:#1e3566;--ok:#8fffb7;--err:#ff8f8f;--btn:#1e3a8a;}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,Segoe UI,Arial}
+    .wrap{max-width:1180px;margin:20px auto;padding:16px}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:16px}
+    .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:18px}
+    h1{margin:0 0 8px;font-size:20px}
+    a{color:#9ec1ff;text-decoration:none} a:hover{text-decoration:underline}
+    label{display:block;margin:10px 0 6px;color:var(--muted)}
+    input,textarea,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#071733;color:var(--txt)}
+    textarea{min-height:86px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button{padding:10px 14px;border-radius:12px;border:0;background:var(--btn);color:#fff;cursor:pointer}
+    button.secondary{background:#243a6b}
+    button.warn{outline:2px solid #f5c451}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .msg{margin-top:10px} .msg.ok{color:var(--ok)} .msg.err{color:var(--err)}
+    .qrbox{width:100%;aspect-ratio:1;border:2px dashed var(--line);border-radius:14px;display:flex;align-items:center;justify-content:center}
+    .qrbox img{max-width:100%}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid var(--line);margin:6px 0;color:var(--muted)}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>🎨 QR Factory V2 — Generate</h1>
+    <div class="pill">• QR in sẵn chứa link scan</div><br>
+    <div class="pill">• <a href="./admin.html">Mở Admin dashboard</a></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <label>Product Name</label>
+      <input id="product">
+
+      <label>Batch / Serial</label>
+      <input id="batch">
+
+      <div class="row">
+        <div>
+          <label>MFG Date (dd-mm-yyyy)</label>
+          <input id="mfg" placeholder="23-12-2025">
+        </div>
+        <div>
+          <label>EXP Date (dd-mm-yyyy)</label>
+          <input id="exp" placeholder="23-06-2026">
+        </div>
+      </div>
+
+      <label>Note / Extra</label>
+      <textarea id="note"></textarea>
+
+      <div class="row">
+        <div>
+          <label>Status</label>
+          <select id="status">
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+          </select>
+        </div>
+        <div>
+          <label>(Tùy chọn) Code</label>
+          <input id="code" placeholder="Để trống = tự sinh">
+        </div>
+      </div>
+
+      <div class="btns">
+        <button id="btnCreate">Tạo QR (lưu DB)</button>
+        <button id="btnOpen" class="secondary">Mở link scan</button>
+        <button id="btnPng" class="secondary">Tải PNG</button>
+        <button id="btnPdf" class="secondary warn">Tải PDF</button>
+      </div>
+
+      <div id="msg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h3>📄 Kết quả</h3>
+      <div class="pill">Code: <span id="outCode">-</span></div><br>
+      <div class="pill">URL: <span id="outUrl">-</span></div>
+      <div class="qrbox" id="qrBox">QR Preview</div>
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
-const msg = (t, cls) => { const m=$("msg"); m.textContent=t; m.className="msg "+cls; };
+const setMsg = (t, cls) => { const m=$("msg"); m.textContent=t; m.className="msg "+cls; };
 
+let lastCode = "";
 let lastScanUrl = "";
 let lastQrDataUrl = "";
-let lastCode = "";
 
 function setButtonsEnabled(on){
   ["btnCreate","btnOpen","btnPng","btnPdf"].forEach(id=>{
-    const b = document.getElementById(id);
+    const b=$(id);
     if(!b) return;
     b.disabled = !on;
     b.style.opacity = on ? "1" : "0.6";
@@ -16,18 +108,11 @@ function setButtonsEnabled(on){
   });
 }
 
-async function apiGet(path){
-  return await window.qrFactory.apiGet(path);
-}
-async function apiPost(path, body){
-  return await window.qrFactory.apiPost(path, body);
-}
-
 function renderQr(dataUrl){
-  const box = $("qrBox");
-  box.innerHTML = "";
-  const img = new Image();
-  img.src = dataUrl;
+  const box=$("qrBox");
+  box.innerHTML="";
+  const img=new Image();
+  img.src=dataUrl;
   box.appendChild(img);
 }
 
@@ -39,54 +124,55 @@ async function createQr(){
     exp_date: $("exp").value,
     note_extra: $("note").value,
     status: $("status").value,
-    code: $("code").value.trim() // có thì dùng, không thì server tự sinh
+    code: $("code").value.trim()
   };
 
-  const r = await apiPost("/api/qr", payload);
+  const r = await window.qrFactory.apiPost("/api/qr", payload);
   if(!r?.ok) throw new Error("Create failed");
 
   lastCode = r.code;
-  lastScanUrl = r.scanUrl;
-
+  lastScanUrl = r.scanUrl; // ✅ http://127.../qr.html?token=...
   $("outCode").textContent = lastCode;
   $("outUrl").textContent = lastScanUrl;
 
-  // ✅ QR đúng link scan (qr.html?token=...)
-  lastQrDataUrl = await window.qrFactory.toDataUrl(lastScanUrl, { width: 360, margin: 1 });
+  lastQrDataUrl = await window.qrFactory.toDataUrl(lastScanUrl);
   renderQr(lastQrDataUrl);
 
-  msg("Tạo QR + lưu DB OK ✅", "ok");
+  setMsg("Tạo QR + lưu DB OK ✅","ok");
 }
 
 async function openLink(){
-  if(!lastScanUrl) return msg("Chưa có URL", "err");
+  if(!lastScanUrl) return setMsg("Chưa có URL","err");
   await window.qrFactory.openExternal(lastScanUrl);
 }
 
 async function dlPng(){
-  if(!lastQrDataUrl) return msg("Chưa có QR/URL", "err");
+  if(!lastQrDataUrl) return setMsg("Chưa có QR/URL","err");
   await window.qrFactory.savePng({ filename: `${lastCode||"qr"}.png`, dataUrl: lastQrDataUrl });
+  setMsg("Đã lưu PNG ✅","ok");
 }
 
 async function dlPdf(){
   await window.qrFactory.savePdf({ filename: `${lastCode||"qr"}.pdf` });
+  setMsg("Đã lưu PDF ✅","ok");
 }
 
 document.addEventListener("DOMContentLoaded", async ()=>{
   setButtonsEnabled(false);
-
   try{
-    await apiGet("/api/health");
-    msg("Ready ✅ Server OK", "ok");
+    await window.qrFactory.apiGet("/api/health");
+    setMsg("Ready ✅ Server OK","ok");
     setButtonsEnabled(true);
   }catch(e){
-    msg("Server chưa sẵn sàng.", "err");
+    setMsg(String(e.message||e),"err");
     setButtonsEnabled(false);
   }
 
-  $("btnCreate").onclick = ()=>createQr().catch(e=>msg(String(e.message||e),"err"));
-  $("btnOpen").onclick   = ()=>openLink().catch(e=>msg(String(e.message||e),"err"));
-  $("btnPng").onclick    = ()=>dlPng().catch(e=>msg(String(e.message||e),"err"));
-  $("btnPdf").onclick    = ()=>dlPdf().catch(e=>msg(String(e.message||e),"err"));
+  $("btnCreate").onclick = ()=>createQr().catch(e=>setMsg(String(e.message||e),"err"));
+  $("btnOpen").onclick   = ()=>openLink().catch(e=>setMsg(String(e.message||e),"err"));
+  $("btnPng").onclick    = ()=>dlPng().catch(e=>setMsg(String(e.message||e),"err"));
+  $("btnPdf").onclick    = ()=>dlPdf().catch(e=>setMsg(String(e.message||e),"err"));
 });
 </script>
+</body>
+</html>
