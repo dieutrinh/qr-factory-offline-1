@@ -8,4 +8,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "Disabled auto-zip. Use build-exe-win.yml for EXE."
+      - run: echo "ZIP disabled (manual only). Use build-exe-win.yml to build EXE."
