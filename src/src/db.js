@@ -1,7 +1,17 @@
 import Database from "better-sqlite3";
 import XLSX from "xlsx";
+import fs from "fs";
+import path from "path";
 
-const db = new Database("data.sqlite");
+const DB_FILE = process.env.DB_FILE || "data.sqlite";
+
+// đảm bảo folder tồn tại
+const dbDir = path.dirname(DB_FILE);
+if (dbDir && dbDir !== "." && !fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
+const db = new Database(DB_FILE);
 
 export function initDb() {
   db.exec(`
@@ -57,8 +67,7 @@ export function exportToXlsxBuffer() {
   const ws = XLSX.utils.json_to_sheet(items);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "qr_codes");
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  return buf;
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
 
 export function getStats() {
